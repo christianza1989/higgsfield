@@ -370,3 +370,11 @@ export function spendSince(sinceMs: number): { usd: number; count: number } {
     .get(sinceMs) as { usd: number; count: number };
   return { usd: row.usd, count: row.count };
 }
+
+/** Include pending estimates so simultaneous requests reserve the remaining budget. */
+export function committedSpendSince(sinceMs: number): number {
+  const row = db().prepare(`SELECT COALESCE(SUM(est_usd), 0) AS usd FROM jobs
+    WHERE status IN ('completed', 'pending', 'queued', 'in_progress', 'downloading')
+    AND created_at >= ?`).get(sinceMs) as { usd: number };
+  return row.usd;
+}

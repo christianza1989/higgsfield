@@ -100,7 +100,7 @@ export default function PromptsPage() {
     <div className={`min-h-0 flex-1 overflow-y-auto transition-[padding] duration-200 ${editorOpen ? 'xl:pr-[420px]' : ''}`}>
       <section className="min-w-0 p-5 lg:p-7">
         <p className="mb-2 text-sm text-muted">Showing {shown.length} of {entries.length} prompts{category !== 'all' ? ` · ${category}` : ' · All categories'}</p>
-        <p className="mb-4 text-xs leading-relaxed text-faint">40 original UGC/ad templates + 163 entries from the <a href="https://github.com/EvoLinkAI/awesome-seedance-2.5-prompts" target="_blank" rel="noreferrer" className="text-accent">EvoLinkAI collection</a>. Click play or hover for a muted video preview. Templates without a video are labeled. <Link href="/video" className="text-accent">Open video studio →</Link></p>
+        <p className="mb-4 text-xs leading-relaxed text-faint">40 original UGC/ad templates + 163 entries from the <a href="https://github.com/EvoLinkAI/awesome-seedance-2.5-prompts" target="_blank" rel="noreferrer" className="text-accent">EvoLinkAI collection</a>. Click play or hover for a muted video preview. Community examples include Seedance 2.0 and are not verified with our Seedance 2.5 integration. Original templates are untested. <Link href="/ads" className="text-accent">Plan a timed ad with your voiceover →</Link></p>
         {message && !editorOpen && <p role="status" className="mb-4 text-sm text-warn">{message}</p>}
         {!loaded && <p className="text-faint">Loading prompts…</p>}
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,260px),1fr))] items-start gap-4">

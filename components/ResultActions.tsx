@@ -27,8 +27,8 @@ export default function ResultActions({ job, gen, onChanged }: { job: Job; gen?:
   const cls = 'rounded-lg border border-edge bg-panel-2 px-3 py-2 text-xs hover:border-accent/50 disabled:opacity-40';
   return <div className="flex flex-wrap gap-2">
     {gen && <button className={`${cls} ${gen.favorite ? 'text-accent' : ''}`} disabled={busy} onClick={() => void favorite()}>{gen.favorite ? '★ Favorited' : '☆ Favorite'}</button>}
-    <button className={cls} onClick={() => openComposer(draftFromJob(job))}>Reuse settings</button>
-    <button className={cls} disabled={busy} onClick={() => void save()}>Save prompt</button>
+    {job.endpoint !== 'local/edit' && <><button className={cls} onClick={() => openComposer(draftFromJob(job))}>Reuse settings</button>
+    <button className={cls} disabled={busy} onClick={() => void save()}>Save prompt</button></>}
     <button className={cls} onClick={async () => { try { await navigator.clipboard.writeText(job.prompt); setMessage('Prompt copied.'); } catch { setMessage('Could not copy prompt.'); } }}>Copy prompt</button>
     {message && <p role="status" className="w-full text-xs text-muted">{message}</p>}
   </div>;

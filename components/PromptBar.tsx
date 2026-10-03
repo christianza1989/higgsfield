@@ -18,6 +18,7 @@ import { providerPeer, transferParams } from '@/lib/provider-pairs';
 import ComparePrices from './ComparePrices';
 import ParamPill from "./ParamPill";
 import Popover from "./Popover";
+import { referenceLabel, validateReferences, type VideoReference, type ReferenceMode } from '@/lib/video-references';
 
 /**
  * The floating bottom-centre composer.
@@ -27,8 +28,7 @@ import Popover from "./Popover";
  * `num_images` and 2K/4K, Soul Reference takes `batch_size` and 720p/1080p.
  */
 
-interface Ref {
-  url: string;
+interface Ref extends VideoReference {
   name: string;
   preview: string;
   kind: "image" | "video" | "audio";
@@ -50,6 +50,7 @@ export default function PromptBar({
   const [params, setParams] = useState<Record<string, unknown>>(() => defaultParams(model));
   const [batch, setBatch] = useState(1);
   const [refs, setRefs] = useState<Ref[]>([]);
+  const [referenceMode, setReferenceMode] = useState<ReferenceMode>('references');
 
   const [estimate, setEstimate] = useState<number | null>(null);
   const [priceNote, setPriceNote] = useState<string | null>(null);
@@ -83,6 +84,7 @@ export default function PromptBar({
     if (!supportsAttachment(model)) setRefs([]);
     setEstimate(null);
     setPriceNote(null);
+    setMetered(null);
   }, [model]);
 
   useEffect(() => {
@@ -95,7 +97,8 @@ export default function PromptBar({
         sessionStorage.removeItem('studio:draft');
         const target = getModel(draft.modelId ?? '') ?? modelsByKind(kind)[0];
         setPrompt(draft.prompt); setSavedPrompt(false); setError(null);
-        setRefs((draft.refUrls ?? []).slice(0, maxRefs(target)).map((url, i) => ({ url, preview: url, name: `Reference ${i + 1}`, kind: refKindOf(target) })));
+        setReferenceMode(draft.referenceMode ?? 'references');
+        setRefs(draft.references?.map((r, i) => ({ ...r, name: r.name ?? `Reference ${i + 1}`, preview: r.assetId ? `/api/reference-assets/${r.assetId}` : r.url })) ?? (draft.refUrls ?? []).slice(0, maxRefs(target)).map((url, i) => ({ url, preview: url, name: `Reference ${i + 1}`, kind: refKindOf(target) })));
         if (target.id === model.id) {
           setParams({ ...defaultParams(target), ...draft.params }); setBatch(draft.batch ?? 1);
         } else {
@@ -114,7 +117,7 @@ export default function PromptBar({
     setSavingPrompt(true);
     try {
       const res = await fetch('/api/prompts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: prompt.trim().slice(0, 80), prompt, kind, modelId: model.id, params }) });
+        body: JSON.stringify({ title: prompt.trim().slice(0, 80), prompt, kind, modelId: model.id, params: { ...params, ...(model.referenceModes ? { _studio_references: refs.map(({ preview, ...r }) => r), _studio_reference_mode: referenceMode } : {}) } }) });
       if (!res.ok) { setError((await res.json()).error); return; }
       setSavedPrompt(true);
     } catch { setError('Could not save prompt.'); } finally { setSavingPrompt(false); }
@@ -154,12 +157,20 @@ export default function PromptBar({
   const missing = model.params.filter(
     (d) => d.required && d.default === undefined && !params[d.key],
   );
+  let referenceError: string | null = null;
+  if (model.referenceModes) {
+    try { validateReferences(refs, referenceMode); }
+    catch (e) { referenceError = e instanceof Error ? e.message : 'Invalid references.'; }
+  }
 
   const canSubmit =
     prompt.trim().length > 0 &&
     !busy &&
     !uploading &&
     !blocked &&
+    !referenceError &&
+    !estimating &&
+    (estimate !== null || metered !== null) &&
     missing.length === 0 &&
     (!model.refRequired || refs.length > 0);
 
@@ -169,9 +180,9 @@ export default function PromptBar({
       prompt: prompt.trim() || "placeholder",
       params,
       batch,
-      refUrls: refs.map((r) => r.url),
+      ...(model.referenceModes ? { references: refs.map(({ preview, ...r }) => r), referenceMode } : { refUrls: refs.map((r) => r.url) }),
     }),
-    [model.id, prompt, params, batch, refs],
+    [model, prompt, params, batch, refs, referenceMode],
   );
 
   // Debounced pricing. Deliberately keyed off everything except prompt text —
@@ -180,13 +191,14 @@ export default function PromptBar({
     m: model.id,
     p: params,
     b: batch,
-    r: refs.length,
+    r: refs.map(r => ({ url: r.url, kind: r.kind, duration: r.duration })), mode: referenceMode,
   });
 
   useEffect(() => {
-    if (model.refRequired && refs.length === 0) return;
+    if ((model.refRequired && refs.length === 0) || referenceError) { setEstimate(null); setMetered(null); return; }
     let cancelled = false;
     setEstimating(true);
+    setEstimate(null); setMetered(null); setPriceNote(null);
 
     const t = setTimeout(async () => {
       try {
@@ -229,7 +241,7 @@ export default function PromptBar({
           setPriceNote(data.error ?? "Could not estimate the generation price.");
         }
       } catch {
-        if (!cancelled) setEstimate(null);
+        if (!cancelled) { setEstimate(null); setMetered(null); setPriceNote('Could not reach the provider to check pricing.'); }
       } finally {
         if (!cancelled) setEstimating(false);
       }
@@ -258,17 +270,19 @@ export default function PromptBar({
     const first = all.find((f) => /^(image|video|audio)\//.test(f.type));
     if (!first) return;
     const dropped = (first.type.split("/")[0] as "image" | "video" | "audio");
-    const incoming = all.filter((f) => f.type.startsWith(dropped + "/"));
+    const incoming = all.filter((f) => model.referenceModes ? /^(image|video|audio)\//.test(f.type) : f.type.startsWith(dropped + "/"));
     setError(null);
+    if (model.referenceModes && referenceMode === 'frames' && incoming.some(f => !f.type.startsWith('image/'))) { setError('First/last frame mode accepts images only. Choose References for audio or video.'); return; }
 
     let target = model;
-    if (!supportsAttachment(target) || refKindOf(target) !== dropped) {
+    if (!supportsAttachment(target) || (!target.referenceModes && refKindOf(target) !== dropped)) {
       const fallback = available.find((m) => supportsAttachment(m) && refKindOf(m) === dropped);
       if (!fallback) {
         setError(`No ${kind} model accepts a ${dropped} attachment.`);
         return;
       }
       target = fallback;
+      setRefs([]);
       setModelId(fallback.id);
       setSwitchedNote(
         `${model.name} can't take ${dropped === "audio" ? "an" : "a"} ${dropped} attachment, so this switched to ${fallback.name}.`,
@@ -277,9 +291,9 @@ export default function PromptBar({
       setSwitchedNote(null);
     }
 
-    const limit = maxRefs(target);
-    const room = limit === 1 ? 1 : Math.max(0, limit - refs.length);
-    const chosen = incoming.slice(0, room || 1);
+    const limit = target.referenceModes && referenceMode === 'frames' ? target.maxFrameImages ?? 2 : maxRefs(target);
+    const room = limit === 1 ? 1 : Math.max(0, limit - (target.id === model.id ? refs.length : 0));
+    const chosen = incoming.slice(0, room);
     if (incoming.length > chosen.length) {
       setError(`${target.name} takes at most ${limit} image${limit === 1 ? "" : "s"}.`);
     }
@@ -290,13 +304,15 @@ export default function PromptBar({
         const form = new FormData();
         form.append("file", file);
         form.append("provider", provider);
+        if (target.referenceModes) form.append('validateReferences', '1');
         const res = await fetch("/api/upload", { method: "POST", body: form });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Upload failed.");
         const added = {
+          ...data,
           url: data.url,
           name: file.name,
-          preview: URL.createObjectURL(file),
+          preview: data.localUrl ?? data.url,
           kind: (data.kind ?? dropped) as "image" | "video" | "audio",
         };
         setRefs((prev) => (limit === 1 ? [added] : [...prev, added].slice(0, limit)));
@@ -376,11 +392,10 @@ export default function PromptBar({
     // While an IME candidate window is open, Enter is confirming a character,
     // not submitting. Ignoring this would make the composer unusable for
     // anyone typing Japanese, Chinese or Korean.
-    if (e.nativeEvent.isComposing) return;
+    if (e.nativeEvent.isComposing || e.repeat) return;
 
-    // Shift+Enter inserts a line break; plain Enter sends. Cmd/Ctrl+Enter also
-    // sends, since that was the old binding and the muscle memory is harmless.
-    if (e.shiftKey) return;
+    // Plain Enter edits a multiline prompt. Only an explicit modifier submits.
+    if (!e.ctrlKey && !e.metaKey) return;
 
     e.preventDefault();
     void generate();
@@ -405,7 +420,7 @@ export default function PromptBar({
         </div>
       )}
 
-      <div className="pointer-events-auto w-full max-w-3xl rounded-2xl border border-edge bg-panel/95 shadow-2xl shadow-black/70 backdrop-blur-xl">
+      <div className="pointer-events-auto max-h-[75vh] overflow-y-auto w-full max-w-3xl rounded-2xl border border-edge bg-panel/95 shadow-2xl shadow-black/70 backdrop-blur-xl">
         {error && (
           <div className="flex items-start gap-2 border-b border-edge-soft px-4 py-2.5 text-sm text-danger">
             <span className="mt-px">⚠</span>
@@ -431,9 +446,7 @@ export default function PromptBar({
 
         {!blocked && metered && (
           <p className="border-b border-edge-soft px-4 py-2.5 text-xs leading-relaxed text-faint">
-            {model.meteredNote ??
-              `${model.name} bills per token rather than per generation, so there is no fixed price up front.`}{" "}
-            Higgsfield reconciles the exact charge after the request runs.
+            {metered} The provider determines the final charge. A video reference can add input processing costs.
           </p>
         )}
 
@@ -444,7 +457,24 @@ export default function PromptBar({
           </div>
         )}
 
-        {refs.length > 0 && (
+        {model.referenceModes && <div className="border-b border-edge-soft px-4 py-2 text-xs text-faint">
+          <label>Reference mode <select aria-label="Reference mode" value={referenceMode} disabled={uploading || busy} onChange={e => { setReferenceMode(e.target.value as ReferenceMode); setRefs([]); setSwitchedNote('Reference mode changed. Add files for the selected purpose.'); }} className="ml-2 rounded-lg bg-panel-2 p-2 text-text">
+            {model.referenceModes.includes('references') && <option value="references">Product / character / style / audio</option>}
+            {model.referenceModes.includes('frames') && <option value="frames">{model.maxFrameImages === 1 ? 'First frame' : 'Exact first / last frame'}</option>}
+          </select></label>
+          <p className="mt-1">{referenceMode === 'frames' ? 'Images define the composition at the start and end. Use matching image and output ratios.' : 'Describe each file’s purpose. Use @Image1, @Video1 and @Audio1 in the prompt. A product photo is a reference, not automatically the first frame.'}</p>
+        </div>}
+        {referenceError && <p className="px-4 py-2 text-xs text-warn">{referenceError}</p>}
+        {model.referenceModes && refs.length > 0 && <div className="max-h-64 space-y-2 overflow-y-auto border-b border-edge-soft px-4 py-3">
+          {refs.map((r, i) => <div key={r.url} className="flex items-start gap-3 rounded-xl bg-panel-2 p-2">
+            {r.kind === 'image' ? <img src={r.preview} alt={r.name} className="h-16 w-20 rounded object-contain" /> : r.kind === 'video' ? <video src={r.preview} controls preload="metadata" className="h-20 w-36 rounded" /> : <audio src={r.preview} controls preload="metadata" className="h-10 w-40" />}
+            <div className="min-w-0 flex-1"><p className="truncate text-xs"><strong>{referenceLabel(refs, i, referenceMode)}</strong> · {r.name}{r.duration ? ` · ${r.duration.toFixed(1)}s` : ''}</p>
+              {referenceMode === 'references' && <input aria-label={`Purpose for ${referenceLabel(refs, i, referenceMode)}`} maxLength={300} placeholder="e.g. Product identity, label and packaging only" value={r.purpose ?? ''} onChange={e => setRefs(prev => prev.map((v, j) => i === j ? { ...v, purpose: e.target.value } : v))} className="mt-1 w-full rounded bg-panel p-2 text-xs" />}
+              <div className="mt-1 flex gap-3 text-xs"><button disabled={i === 0} onClick={() => setRefs(prev => { const next = [...prev]; [next[i - 1], next[i]] = [next[i], next[i - 1]]; return next; })} className="disabled:opacity-30">Move up</button><button onClick={() => setRefs(prev => prev.filter((_, j) => i !== j))}>Remove</button></div>
+            </div>
+          </div>)}
+        </div>}
+        {!model.referenceModes && refs.length > 0 && (
           <div className="flex flex-wrap gap-2 border-b border-edge-soft px-4 py-3">
             {refs.map((r, i) => (
               <div key={r.url} className="group relative size-14 overflow-hidden rounded-lg border border-edge">
@@ -480,8 +510,8 @@ export default function PromptBar({
         )}
 
         {priceNote && <p className="border-b border-edge-soft px-4 py-2 text-xs text-faint">{priceNote}</p>}
-        {kind === 'video' && <ComparePrices model={model} params={params} refUrls={refs.map(r => r.url)} />}
-        {provider === "openrouter" && <p className="border-b border-edge-soft px-4 py-2 text-xs text-faint">Image uploads use your Higgsfield storage key. Images fill the first frame, then the last frame. Submitted OpenRouter videos cannot be canceled here.</p>}
+        {kind === 'video' && (!model.referenceModes || refs.length === 0) && <ComparePrices model={model} params={params} refUrls={refs.map(r => r.url)} />}
+        {provider === "openrouter" && <p className="border-b border-edge-soft px-4 py-2 text-xs text-faint">Reference uploads use Higgsfield storage. Submitted OpenRouter videos cannot be canceled here.</p>}
 
         <div className="flex items-start gap-3 px-4 pt-3.5">
           <button
@@ -506,7 +536,7 @@ export default function PromptBar({
           <input
             ref={fileInput}
             type="file"
-            accept={acceptFor(refKindOf(model))}
+            accept={model.referenceModes ? referenceMode === 'frames' ? 'image/jpeg,image/png,image/webp,image/gif' : 'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,audio/wav,audio/x-wav,audio/mpeg' : acceptFor(refKindOf(model))}
             multiple={maxRefs(model) > 1}
             className="hidden"
             onChange={(e) => attach(e.target.files)}
@@ -544,6 +574,7 @@ export default function PromptBar({
 
         <div className="flex flex-wrap items-center gap-2 px-4 pt-3 pb-3.5">
           <Link href="/prompts" className="rounded-full border border-edge px-3 py-1.5 text-xs hover:text-accent">Prompt library</Link>
+          {kind === 'video' && <Link href="/ads" className="rounded-full border border-accent/40 px-3 py-1.5 text-xs text-accent">Ad planner</Link>}
           <button onClick={() => void savePrompt()} disabled={!prompt.trim() || savingPrompt} className="rounded-full border border-edge px-3 py-1.5 text-xs hover:text-accent disabled:opacity-40">{savedPrompt ? 'Saved ✓' : savingPrompt ? 'Saving…' : 'Save prompt'}</button>
           {kind === "video" && (
             <select aria-label="Video provider" value={provider}
@@ -556,8 +587,8 @@ export default function PromptBar({
                 const nextParams = transferParams(selected, params);
                 restoring.current = { kind, prompt, modelId: selected.id, params: nextParams };
                 setProvider(next); setModelId(selected.id);
-                setRefs(prev => prev.slice(0, maxRefs(selected)).filter(r => r.kind === refKindOf(selected)));
-                setError(null); setSwitchedNote('Provider changed. Shared settings were kept; review provider-specific controls and reference slots.'); setEstimate(null); setPriceNote(null);
+                setRefs([]); setReferenceMode('references');
+                setError(null); setSwitchedNote('Provider changed. Shared settings were kept. Add references again for this provider and review the new price.'); setEstimate(null); setPriceNote(null);
               }}
               className="rounded-full border border-edge bg-panel-2 px-3 py-1.5 text-sm text-text">
               <option value="higgsfield">Higgsfield</option>
@@ -568,7 +599,7 @@ export default function PromptBar({
             key={provider}
             models={available}
             current={model}
-            onPick={setModelId}
+            onPick={id => { if (id !== model.id) { setRefs([]); setReferenceMode('references'); setSwitchedNote('Model changed. Add references supported by this model.'); } setModelId(id); }}
             unavailable={unavailable}
             kind={kind}
           />
@@ -587,10 +618,10 @@ export default function PromptBar({
           )}
 
           <span className="ml-auto hidden items-center gap-1.5 text-2xs text-faint sm:flex">
-            <kbd className="rounded border border-edge-soft bg-panel-2 px-1.5 py-0.5 font-sans">↵</kbd>
+            <kbd className="rounded border border-edge-soft bg-panel-2 px-1.5 py-0.5 font-sans">Ctrl / ⌘ ↵</kbd>
             <span>send</span>
             <span className="text-edge">·</span>
-            <kbd className="rounded border border-edge-soft bg-panel-2 px-1.5 py-0.5 font-sans">⇧↵</kbd>
+            <kbd className="rounded border border-edge-soft bg-panel-2 px-1.5 py-0.5 font-sans">↵</kbd>
             <span>new line</span>
           </span>
         </div>

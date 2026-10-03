@@ -11,7 +11,7 @@ test('worker persists a completed OpenRouter video and actual cost, without real
   const originalKey = process.env.OPENROUTER_API_KEY;
   process.chdir(temp);
   process.env.OPENROUTER_API_KEY = 'test-only';
-  const { db, insertJob, getJob, MEDIA_DIR } = await import('./db');
+  const { db, insertJob, getJob, committedSpendSince, spendSince, MEDIA_DIR } = await import('./db');
   const { ensureWorker } = await import('./worker');
   let posts = 0;
   let downloads = 0;
@@ -35,6 +35,7 @@ test('worker persists a completed OpenRouter video and actual cost, without real
     insertJob({ id: 'test-job', model_id: 'openrouter:kwaivgi/kling-v3.0-std', model_name: 'Test video',
       endpoint: 'openrouter:kwaivgi/kling-v3.0-std', kind: 'video', prompt: 'Test only', batch: 1,
       params: { prompt: 'Test only', duration: 5, resolution: '720p', aspect_ratio: '16:9', generate_audio: false }, est_usd: 0.42, est_credits: null });
+    assert.equal(committedSpendSince(0), 0.42); assert.equal(spendSince(0).usd, 0);
     ensureWorker();
     const end = Date.now() + 8000;
     while (getJob('test-job')?.status !== 'completed' && Date.now() < end) await new Promise(r => setTimeout(r, 40));
@@ -42,6 +43,7 @@ test('worker persists a completed OpenRouter video and actual cost, without real
     assert.equal(job.status, 'completed', job.error ?? 'Worker did not finish');
     assert.equal(job.request_id, 'test-video');
     assert.equal(job.est_usd, 0.43);
+    assert.equal(committedSpendSince(0), 0.43);
     assert.equal(posts, 1);
     assert.equal(downloads, 1);
     assert.equal(job.outputs[0].remote_url, null);
@@ -56,6 +58,6 @@ test('worker persists a completed OpenRouter video and actual cost, without real
     if (originalKey === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = originalKey;
     process.chdir(cwd);
     if (!path.resolve(temp).startsWith(path.resolve(os.tmpdir()) + path.sep) || !path.basename(temp).startsWith('studio-worker-test-')) throw new Error('Unsafe test cleanup path.');
-    fs.rmSync(temp, { recursive: true, force: true });
+    await fs.promises.rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });

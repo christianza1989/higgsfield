@@ -15,6 +15,7 @@ const NAV = [
   { href: "/", label: "Home", icon: HomeIcon },
   { href: "/image", label: "Image", icon: ImageIcon },
   { href: "/video", label: "Video", icon: VideoIcon },
+  { href: "/ads", label: "Ad planner", icon: VideoIcon },
   { href: "/library", label: "Library", icon: LibraryIcon },
   { href: "/prompts", label: "Prompts", icon: LibraryIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },

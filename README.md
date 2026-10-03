@@ -1,5 +1,59 @@
 # Zinho Automates
 
+See the Lithuanian [Seedance 2.5 prompting research](docs/research/seedance-2.5-prompting.md)
+for reference modes, voiceover workflows, original ad templates, provider differences,
+and the remaining integration and generation checks (reviewed October 4, 2026).
+
+## Ad creation workflow
+
+Open **Ad planner** (`/ads`) to create a timed advertisement. Start with the
+product identity, audience, UGC or cinematic style, output ratio and provider.
+The default plan is three 5-second scenes, in 9:16 at 720p.
+
+- Upload product/style/motion references and assign a purpose to each file.
+  Seedance References uses mixed image, audio and video inputs, with per-type
+  labels such as `@Image1` and `@Audio1`. Exact first/last-frame control is a
+  separate mode in Video Studio (Higgsfield: first frame; OpenRouter: first/last
+  frame); mode changes clear the previous attachments.
+- Write the action, camera direction, exact speech and optional editing caption
+  for each scene. Scene times remain contiguous. Short scenes generate at least
+  4 seconds and the final edit trims the extra tail.
+- Choose an original WAV/MP3 voiceover, model-generated speech or silent output.
+  Original voiceover and locally uploaded editing clips stay on this computer.
+  The voiceover is added directly in editing and is never sent to the model.
+  This does not provide lip synchronization to that external recording.
+- Check a scene's current price, then explicitly click **Generate scene**.
+  Changed generation settings invalidate its previous quote. Completed clips
+  attach automatically; failed, canceled and moderated jobs do not become results.
+  Use saved Library clips or local MP4/MOV clips as alternatives.
+- Export the final MP4 with exact scene trims, the chosen audio workflow,
+  scene captions and a final CTA. Export is local and makes no API generation
+  request. It preserves framing with padding, outputs 720p H.264/AAC at 24 fps,
+  verifies duration and saves the result in Library.
+
+Plans autosave in browser storage and can be downloaded as JSON. Exact prompt
+timestamps, reference identity and model speech quality still require reviewing
+the real generated output. Separate model requests can vary character or voice
+identity. Lithuanian generated speech remains unverified.
+
+Media inspection, MP3/MOV conversion, export and editing integration tests
+require **FFmpeg and ffprobe on PATH**. On Windows, install from the official
+distribution or run `winget install --id Gyan.FFmpeg -e` and restart your terminal
+and app. Upload validation checks file signatures, media streams, size, image
+dimensions, reference durations/counts and video frame rate. Local editing assets
+can be up to 5 minutes; provider references must fit the stricter 2–30s limits.
+
+Studio uses **Enter for a new line** and **Ctrl/Cmd+Enter to generate**. The
+Generate button waits for a price or an explicit metered-price description.
+Requests with unknown pricing are blocked while a spend cap is active. Pending
+priced jobs reserve budget, using an atomic check when creating the job. The
+cap uses estimates; final provider charges and fees can differ from them.
+
+Run `npm run check:ads` with the local app running to check real local uploads,
+MP3 conversion, a 15s edit, captions/audio, Library persistence and byte-range
+playback. It generates synthetic test fixtures, removes its own test records
+and makes no billable requests. `npm test` also tests the local renderer.
+
 ## UGC and advertising prompt library
 
 Open **Prompts** for 40 original UGC/ad templates: hook–demo–CTA,
@@ -7,7 +61,8 @@ problem–solution, unboxing, routine, faceless demo, founder, FAQ, offer,
 beauty, apparel, food, product hero shots, GRWM, ASMR, comment replies,
 packing, organization, feature tests and niche product demonstrations. Fill the product, benefit,
 spoken script and CTA fields. Templates use **15s, 720p, 9:16, audio on**;
-spoken scripts can be Lithuanian. Review cost and attach your product image
+Lithuanian speech is an unverified template target; it is not in the official
+BytePlus list of documented languages. Review cost and attach your product image
 in the studio before generating. Shorten the duration and script to reduce cost.
 
 The library also includes 163 attributed prompts from the EvoLinkAI collection,
@@ -43,7 +98,8 @@ URLs when present; re-upload expired references. Favorite results remain local.
 Seedance 2.5 and Kling 3.0 Standard / Pro have **Compare provider prices**.
 Quotes apply to one video, preserve supported shared controls, and explain
 token billing/provider defaults. A lower price is not a guarantee of equal
-quality. Switching providers preserves compatible controls and reference slots.
+quality. Switching providers preserves compatible controls and clears attachments
+so their roles cannot silently change between providers.
 
 ## OpenRouter video provider
 
@@ -56,10 +112,14 @@ The worker saves each provider's request ID and resumes polling after restart.
 OpenRouter video downloads are authenticated server-side and saved to the local
 library. Price estimates use the live video model catalogue and exclude platform
 fees and taxes. Once complete, the API's reported usage cost replaces the estimate.
-Unknown prices or unsupported settings block OpenRouter submission.
+Unsupported settings block OpenRouter submission. Video-reference input billing
+has no reliable total quote here; the UI explicitly shows metered pricing. An
+active spend cap blocks these unpriced requests.
 
-Images fill the first-frame and then last-frame slots. Uploading images uses
-Higgsfield storage and therefore also requires a Higgsfield key; text-to-video
+Seedance supports a mixed **References** mode and a separate **First / last
+frame** mode. Kling images fill the first-frame and then last-frame slots.
+Uploading provider references uses Higgsfield storage and therefore also
+requires a Higgsfield key; text-to-video
 only needs OpenRouter. Submitted OpenRouter videos cannot be canceled here
 because the public video API does not document a cancellation endpoint.
 
@@ -97,7 +157,9 @@ A self-hosted front end for the [Higgsfield API](https://docs.higgsfield.ai/docs
 composer-driven workflow as Higgsfield's own app, but billed per generation through your own
 API key instead of a subscription.
 
-70 models across image and video (16 image, 54 video), each verified against the live API.
+The image/video registry combines historical live capability checks with
+current provider documentation. New mixed-reference output quality still needs
+real generation checks.
 
 ## Setup
 

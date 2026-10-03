@@ -53,13 +53,16 @@ function maxConcurrent(): number {
  * Map Higgsfield's status strings onto ours. Anything unrecognised and
  * non-terminal is treated as still running rather than as an error.
  */
-function mapStatus(remote: string): JobStatus {
+export function mapStatus(remote: string): JobStatus {
   switch (remote) {
     case "completed":
       return "completed";
     case "failed":
+    case "expired":
       return "failed";
     case "nsfw":
+    case "moderated":
+    case "blocked":
       return "nsfw";
     case "canceled":
     case "cancelled":

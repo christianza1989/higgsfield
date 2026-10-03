@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { BadRequest, parseGenerationRequest } from "@/lib/payload";
-import { insertJob, spendSince, getSetting } from "@/lib/db";
+import { db, insertJob, committedSpendSince, getSetting } from "@/lib/db";
 import { HiggsfieldError, isMetered } from "@/lib/higgsfield";
 import { estimate, hasCredentials, providerName } from "@/lib/providers";
 import { isOpenRouter } from "@/lib/openrouter";
@@ -39,32 +39,29 @@ export async function POST(req: Request) {
       // Estimation is best-effort; never block a generation on it.
     }
 
-    const cap = Number(getSetting("spend_cap") ?? "");
-    if (Number.isFinite(cap) && cap > 0) {
-      const spent = spendSince(Date.now() - MONTH_MS).usd;
-      if (spent + (usd ?? 0) > cap) {
-        return NextResponse.json(
-          {
-            error: `Spend cap reached: $${spent.toFixed(2)} of $${cap.toFixed(2)} used in the last 30 days. Raise or clear the cap in Settings.`,
-          },
-          { status: 402 },
-        );
-      }
-    }
-
     const id = randomUUID();
-    insertJob({
-      id,
-      model_id: model.id,
-      model_name: `${model.name} · ${providerName(endpoint)}`,
-      endpoint,
-      kind: model.kind,
-      prompt,
-      params: body,
-      batch,
-      est_usd: usd,
-      est_credits: credits,
-    });
+    const budgetError = db().transaction(() => {
+      const cap = Number(getSetting('spend_cap') ?? '');
+      if (Number.isFinite(cap) && cap > 0) {
+        if (usd === null) return 'This request has no reliable up-front price. The active spend cap blocks unpriced requests.';
+        const committed = committedSpendSince(Date.now() - MONTH_MS);
+        if (committed + usd > cap) return `Spend cap reached: $${committed.toFixed(2)} of $${cap.toFixed(2)} spent or reserved in the last 30 days. Raise or clear the cap in Settings.`;
+      }
+      insertJob({
+        id,
+        model_id: model.id,
+        model_name: `${model.name} · ${providerName(endpoint)}`,
+        endpoint,
+        kind: model.kind,
+        prompt,
+        params: body,
+        batch,
+        est_usd: usd,
+        est_credits: credits,
+      });
+      return null;
+    }).immediate();
+    if (budgetError) return NextResponse.json({ error: budgetError }, { status: 402 });
 
     // The worker picks it up on the next tick, honouring the concurrency cap.
     ensureWorker();

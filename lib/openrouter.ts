@@ -53,7 +53,9 @@ export async function videoModels(): Promise<VideoModel[]> {
 }
 
 export function buildOpenRouterBody(endpoint: string, input: Record<string, unknown>): Record<string, unknown> {
-  const { first_frame_url, last_frame_url, ...body } = input;
+  const { first_frame_url, last_frame_url, ...raw } = input;
+  const body = Object.fromEntries(Object.entries(raw).filter(([key]) => !key.startsWith('_studio_')));
+  if (Array.isArray(body.input_references) && body.input_references.length && (first_frame_url || last_frame_url)) throw new HiggsfieldError('Choose references or first/last frames, not both.', 400);
   const frames = [first_frame_url, last_frame_url].flatMap((url, i) => {
     if (!url) return [];
     if (typeof url !== "string" || !url.startsWith("https://")) throw new HiggsfieldError("Reference images need a public HTTPS URL.", 400);
@@ -77,6 +79,7 @@ async function validate(endpoint: string, input: Record<string, unknown>): Promi
 }
 
 export function calculateVideoPrice(model: VideoModel, input: Record<string, unknown>): number | null {
+  if (Array.isArray(input.input_references) && input.input_references.some(r => r?.type === 'video_url')) return null;
   const rates = model.pricing_skus;
   const seconds = Number(input.duration);
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
@@ -98,6 +101,7 @@ export function calculateVideoPrice(model: VideoModel, input: Record<string, unk
 export async function estimateOpenRouter(endpoint: string, input: Record<string, unknown>): Promise<Estimate> {
   const model = await validate(endpoint, input);
   const usd = calculateVideoPrice(model, input);
+  if (usd === null && Array.isArray(input.input_references) && input.input_references.some(r => r?.type === 'video_url')) return { type: 'description', pricing_description: 'Video references are billed for input and output tokens. A reliable total is unavailable before generation; actual usage is recorded after completion.' };
   if (usd === null) throw new HiggsfieldError("No reliable price is available for these OpenRouter settings.", 503);
   return { usd: String(usd), credits: "0" };
 }

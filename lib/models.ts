@@ -1,8 +1,9 @@
 /**
  * Model registry.
  *
- * Every endpoint, parameter, enum value and type below was verified against the
- * LIVE API, not taken from the published OpenAPI spec — the spec is wrong in
+ * The generated registry uses historical live API probes. New mixed-reference
+ * mappings follow provider documentation and still need real generation QA.
+ * The published OpenAPI spec is wrong in
  * several places and omits several models entirely. Confirmed differences:
  *
  *   - Spec lists `/veo3.1` and `/veo3.1/fast`; the real paths end in
@@ -40,6 +41,9 @@ export interface ParamDef {
 
 export interface ModelDef {
   provider?: "higgsfield" | "openrouter";
+  referenceModes?: Array<'references' | 'frames'>;
+  referenceEndpoint?: string;
+  maxFrameImages?: number;
   id: string;
   name: string;
   /** Grouping label for the picker — "Kling", "Seedance", "Higgsfield". */
@@ -488,11 +492,12 @@ const EXTRAS: ModelDef[] = [
   },
   {
     id: "seedance-2-5-audio-reference",
-    name: "Seedance 2.5 Audio Reference",
+    name: "Seedance 2.5 References",
     family: "Seedance",
     vendor: "bytedance",
     kind: "video",
     endpoint: "/bytedance/seedance-2.5/reference-to-video",
+    referenceModes: ['references'],
     refImageKey: "audio_urls",
     refArray: true,
     refKind: "audio",
@@ -500,7 +505,7 @@ const EXTRAS: ModelDef[] = [
     metered: true,
     meteredNote: "Billed per token. Drives the video from an audio track.",
     fromUsd: 0,
-    blurb: "Drive a video from a sound. Attach a WAV.",
+    blurb: "Product, motion and audio references. Assign a role to each asset.",
     params: [
       { key: "duration", label: "Length", type: "int", min: 4, max: 16, step: 1, default: 5 },
       { key: "resolution", label: "Quality", type: "enum", options: ["480p", "720p"], default: "720p" },
@@ -659,7 +664,11 @@ export const MODELS: ModelDef[] = (() => {
   for (const m of CATALOG) byEndpoint.set(m.endpoint, m);
   for (const m of EXTRAS) byEndpoint.set(m.endpoint, m);
   for (const m of OPENROUTER_MODELS) byEndpoint.set(m.endpoint, m);
-  return [...byEndpoint.values()];
+  return [...byEndpoint.values()].map(model => model.endpoint === '/bytedance/seedance-2.5/text-to-video' ? {
+    ...model, referenceModes: ['references', 'frames'] as Array<'references' | 'frames'>,
+    referenceEndpoint: '/bytedance/seedance-2.5/reference-to-video', maxFrameImages: 1,
+    blurb: 'Text, mixed product/style/audio references, or a first-frame image. Up to 16s.'
+  } : model);
 })();
 
 /** Families present for a given kind, cheapest model first. */
@@ -733,6 +742,7 @@ export function acceptFor(refKind: "image" | "video" | "audio"): string {
 
 /** How many references this model will take. */
 export function maxRefs(model: ModelDef): number {
+  if (model.referenceModes) return 50;
   if (model.refKeys?.length) return model.refKeys.length;
   if (!supportsAttachment(model)) return 0;
   return model.refMultiple ? (model.maxRefImages ?? 8) : 1;

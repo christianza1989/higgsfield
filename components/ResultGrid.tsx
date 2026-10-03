@@ -192,7 +192,7 @@ function StatusTile({
           {job.error ?? job.prompt}
         </p>
         <div className="mt-2.5 flex items-center gap-2 text-2xs text-faint">
-          <button className="hover:text-accent" onClick={() => openComposer(draftFromJob(job))}>Reuse</button>
+          {job.endpoint !== 'local/edit' && <button className="hover:text-accent" onClick={() => openComposer(draftFromJob(job))}>Reuse</button>}
           <span className="truncate">{job.model_name}</span>
           <button
             onClick={dismiss}

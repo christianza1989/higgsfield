@@ -5,6 +5,7 @@
   "scripts": {
     "prompts:sync": "node scripts/sync-prompts.mjs",
     "check:studio": "node scripts/check-studio.mjs",
+    "check:ads": "tsx scripts/check-ad-workflow.ts",
     "check:secrets": "node scripts/check-secrets.mjs",
     "seedance": "tsx index.ts",
     "test": "tsx --test lib/*.test.ts",

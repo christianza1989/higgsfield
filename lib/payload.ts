@@ -1,4 +1,6 @@
 import { buildBody, getModel, resolveEndpoint, type ModelDef } from "./models";
+import { referenceInputs, validateReferences, withReferenceRoles, type VideoReference, type ReferenceMode } from './video-references';
+import { readAsset } from './reference-assets';
 
 /**
  * Shared parsing for /api/generate and /api/estimate — both take the same shape
@@ -23,11 +25,11 @@ export function parseGenerationRequest(input: unknown): GenerationRequest {
   const model = getModel(String(raw.modelId ?? ""));
   if (!model) throw new BadRequest(`Unknown model: ${String(raw.modelId)}`);
 
-  const prompt = String(raw.prompt ?? "").trim();
+  let prompt = String(raw.prompt ?? "").trim();
   if (!prompt) throw new BadRequest("A prompt is required.");
 
   const refUrls = Array.isArray(raw.refUrls) ? raw.refUrls.map(String).filter(Boolean) : [];
-  if (model.refRequired && refUrls.length === 0) {
+  if (model.refRequired && refUrls.length === 0 && !(Array.isArray(raw.references) && raw.references.length)) {
     throw new BadRequest(`${model.name} needs a reference image.`);
   }
 
@@ -35,8 +37,58 @@ export function parseGenerationRequest(input: unknown): GenerationRequest {
   const batch = Number.isFinite(batchRaw) ? Math.max(1, Math.round(batchRaw)) : 1;
 
   const params = (raw.params ?? {}) as Record<string, unknown>;
-  const endpoint = resolveEndpoint(model, refUrls.length > 0);
+  let endpoint = resolveEndpoint(model, refUrls.length > 0);
   const body = buildBody(model, prompt, params, batch, refUrls);
+  for (const def of model.params) {
+    const value = body[def.key];
+    if (value === undefined) continue;
+    if (def.type === 'enum' && !def.options?.includes(value as string | number)) throw new BadRequest(`Choose a supported ${def.label.toLowerCase()}.`);
+    if ((def.type === 'int' || def.type === 'float') && (typeof value !== 'number' || (def.min !== undefined && value < def.min) || (def.max !== undefined && value > def.max))) throw new BadRequest(`${def.label} is outside the supported range.`);
+  }
+
+  if (raw.references !== undefined) {
+    if (!model.referenceModes) throw new BadRequest('This model does not support mixed references.');
+    const mode = (raw.referenceMode ?? 'references') as ReferenceMode;
+    if (!model.referenceModes.includes(mode)) throw new BadRequest('This reference mode is not supported by the selected model.');
+    if (!Array.isArray(raw.references)) throw new BadRequest('Invalid references.');
+    try {
+      const references = (raw.references as VideoReference[]).map(r => {
+        if (r.assetId) {
+          const asset = readAsset(r.assetId);
+          if (asset.url !== r.url || asset.kind !== r.kind) throw new Error('The reference no longer matches its uploaded asset.');
+          return { ...r, duration: asset.duration, width: asset.width, height: asset.height, bytes: asset.bytes, frameRate: asset.frameRate };
+        }
+        if (r.kind !== 'image') throw new Error('Upload audio and video references so their duration can be verified.');
+        return r;
+      });
+      validateReferences(references, mode);
+      if (mode === 'frames' && references.length > (model.maxFrameImages ?? 2)) throw new Error('This provider supports only a first-frame image in this mode.');
+      if (refUrls.length) throw new Error('Use one reference mode at a time.');
+      if (mode === 'references') {
+        if (references.length && model.referenceEndpoint) endpoint = model.referenceEndpoint;
+        prompt = withReferenceRoles(prompt, references);
+        body.prompt = prompt;
+        if (model.provider === 'openrouter') { if (references.length) body.input_references = referenceInputs(references); }
+        else for (const kind of ['image', 'video', 'audio']) {
+          const urls = references.filter(r => r.kind === kind).map(r => r.url);
+          if (urls.length) body[`${kind}_urls`] = urls;
+        }
+      } else {
+        if (model.provider === 'openrouter') {
+          if (references[0]) body.first_frame_url = references[0].url;
+          if (references[1]) body.last_frame_url = references[1].url;
+        } else if (references[0] && model.imageEndpoint && model.refImageKey) {
+          endpoint = model.imageEndpoint; body[model.refImageKey] = references[0].url;
+        }
+        if (references[0]?.width && references[0]?.height) {
+          const [w, h] = String(body.aspect_ratio).split(':').map(Number);
+          if (Math.abs(references[0].width / references[0].height - w / h) > 0.03) throw new Error('Choose an output ratio matching the first frame.');
+        }
+      }
+      body._studio_references = references;
+      body._studio_reference_mode = mode;
+    } catch (error) { throw new BadRequest(error instanceof Error ? error.message : 'Invalid references.'); }
+  }
 
   return { model, endpoint, body, prompt, batch, refUrls };
 }

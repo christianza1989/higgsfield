@@ -11,7 +11,8 @@ assert.equal(prompts.status, 200);
 assert.equal(prompts.data.prompts.filter(p => p.id.startsWith('evolink-')).length, 163);
 assert.equal(prompts.data.prompts.filter(p => p.id.startsWith('starter-')).length, 40);
 assert.equal((await call('/api/prompts', 'POST', { title: 'Invalid', kind: 'video' })).status, 400);
-const created = await call('/api/prompts', 'POST', { title: 'Disposable API smoke check', prompt: 'Test prompt', kind: 'video', modelId: 'openrouter:bytedance/seedance-2.5', params: { duration: 15, aspect_ratio: '9:16', generate_audio: true } });
+const references = [{ kind: 'image', url: 'https://example.com/product.png', width: 720, height: 1280, purpose: 'Product packaging only.' }];
+const created = await call('/api/prompts', 'POST', { title: 'Disposable API smoke check', prompt: 'Test prompt', kind: 'video', modelId: 'openrouter:bytedance/seedance-2.5', references, referenceMode: 'references', params: { duration: 15, aspect_ratio: '9:16', generate_audio: true } });
 assert.equal(created.status, 201);
 const id = created.data.id;
 try {
@@ -20,6 +21,8 @@ try {
   assert.equal(saved.favorite, true);
   assert.equal(saved.params.duration, 15);
   assert.equal(saved.params.generate_audio, true);
+  assert.deepEqual(saved.params._studio_references, references);
+  assert.equal(saved.params._studio_reference_mode, 'references');
   assert.equal((await call('/api/jobs?favorites=1')).status, 200);
   console.log('Prompt catalogue, personal save, persistent favorite, settings and favorites API: OK');
 } finally {

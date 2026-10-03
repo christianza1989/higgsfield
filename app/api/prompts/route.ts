@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { db } from '@/lib/db';
 import { listPrompts } from '@/lib/prompts';
 import { getModel } from '@/lib/models';
+import { validateReferences, type ReferenceMode } from '@/lib/video-references';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,7 +18,16 @@ export async function POST(req: Request) {
   }
   const model = getModel(raw.modelId);
   if (raw.modelId && (!model || model.kind !== raw.kind)) return NextResponse.json({ error: 'Invalid model.' }, { status: 400 });
-  const params = Object.fromEntries((model?.params ?? []).filter(p => ['string', 'number', 'boolean'].includes(typeof raw.params?.[p.key])).map(p => [p.key, raw.params[p.key]]));
+  const params: Record<string, unknown> = Object.fromEntries((model?.params ?? []).filter(p => ['string', 'number', 'boolean'].includes(typeof raw.params?.[p.key])).map(p => [p.key, raw.params[p.key]]));
+  const references = raw.references ?? raw.params?._studio_references;
+  const mode = (raw.referenceMode ?? raw.params?._studio_reference_mode ?? 'references') as ReferenceMode;
+  if (references !== undefined) {
+    try {
+      if (!model?.referenceModes?.includes(mode)) throw new Error('This model does not support the saved reference mode.');
+      validateReferences(references, mode);
+      params._studio_references = references; params._studio_reference_mode = mode;
+    } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid references.' }, { status: 400 }); }
+  }
   const id = randomUUID();
   db().prepare('INSERT INTO prompts (id,title,category,prompt,kind,model_id,params,created_at) VALUES (?,?,?,?,?,?,?,?)')
     .run(id, raw.title.trim(), String(raw.category || 'My prompts').slice(0, 100), raw.prompt.trim(), raw.kind, model?.id ?? null, JSON.stringify(params), Date.now());
