@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- The tab icon carries the gradient tile, not the bare mark: on a light
+       tab strip a dark monogram alone would disappear. -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5b9dff"/>
+      <stop offset="100%" stop-color="#ff7ab8"/>
+    </linearGradient>
+  </defs>
+  <rect width="24" height="24" rx="5.5" fill="url(#g)"/>
+  <g fill="#04101d" transform="translate(1.6 1.4) scale(0.87)">
+    <path d="M2.6 5h9v2.9L6.4 16.1h5.2V19h-9v-2.9L7.8 7.9H2.6z"/>
+    <path d="M14.6 5h2.2l4 14h-3l-.7-2.7h-4.8L11.6 19h-3zm.1 4.2-1.5 5.3h3z"/>
+  </g>
+</svg>
