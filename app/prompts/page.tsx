@@ -80,7 +80,7 @@ export default function PromptsPage() {
     </header>
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row">
       <section className="min-w-0 flex-1 p-7 lg:overflow-y-auto">
-        <p className="mb-4 text-xs leading-relaxed text-faint">{shown.length} prompts shown · 16 original UGC/ad templates plus the <a href="https://github.com/EvoLinkAI/awesome-seedance-2.5-prompts" target="_blank" rel="noreferrer" className="text-accent">EvoLinkAI collection</a>, with original author attribution. UGC presets use 15s, 9:16 and audio. Attach your product image and check the estimated cost. <Link href="/video" className="text-accent">Open video studio →</Link></p>
+        <p className="mb-4 text-xs leading-relaxed text-faint">{shown.length} prompts shown · 40 original UGC/ad templates plus the <a href="https://github.com/EvoLinkAI/awesome-seedance-2.5-prompts" target="_blank" rel="noreferrer" className="text-accent">EvoLinkAI collection</a>, with original author attribution. UGC presets use 15s, 9:16 and audio. Attach your product image and check the estimated cost. <Link href="/video" className="text-accent">Open video studio →</Link></p>
         {!loaded && <p className="text-faint">Loading prompts…</p>}
         <div className="grid gap-3 xl:grid-cols-2">
           {shown.map(e => <article key={e.id} className={`rounded-2xl border bg-panel p-4 ${selected?.id === e.id ? 'border-accent/60' : 'border-edge-soft'}`}>

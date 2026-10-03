@@ -2,9 +2,10 @@
 
 ## UGC and advertising prompt library
 
-Open **Prompts** for 16 original UGC/ad templates: hook–demo–CTA,
+Open **Prompts** for 40 original UGC/ad templates: hook–demo–CTA,
 problem–solution, unboxing, routine, faceless demo, founder, FAQ, offer,
-beauty, apparel, food and product hero shots. Fill the product, benefit,
+beauty, apparel, food, product hero shots, GRWM, ASMR, comment replies,
+packing, organization, feature tests and niche product demonstrations. Fill the product, benefit,
 spoken script and CTA fields. Templates use **15s, 720p, 9:16, audio on**;
 spoken scripts can be Lithuanian. Review cost and attach your product image
 in the studio before generating. Shorten the duration and script to reduce cost.

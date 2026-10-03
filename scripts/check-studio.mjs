@@ -9,7 +9,7 @@ async function call(route, method = 'GET', body) {
 const prompts = await call('/api/prompts');
 assert.equal(prompts.status, 200);
 assert.equal(prompts.data.prompts.filter(p => p.id.startsWith('evolink-')).length, 163);
-assert.equal(prompts.data.prompts.filter(p => p.id.startsWith('starter-')).length, 16);
+assert.equal(prompts.data.prompts.filter(p => p.id.startsWith('starter-')).length, 40);
 assert.equal((await call('/api/prompts', 'POST', { title: 'Invalid', kind: 'video' })).status, 400);
 const created = await call('/api/prompts', 'POST', { title: 'Disposable API smoke check', prompt: 'Test prompt', kind: 'video', modelId: 'openrouter:bytedance/seedance-2.5', params: { duration: 15, aspect_ratio: '9:16', generate_audio: true } });
 assert.equal(created.status, 201);
