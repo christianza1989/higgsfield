@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PromptMedia } from '@/lib/prompt-media';
 
-export default function PromptExample({ id, videoUrl, source }: { id: string; videoUrl?: string; source?: string }) {
+export default function PromptExample({ id, videoUrl, source, hovered }: { id: string; videoUrl?: string; source?: string; hovered: boolean }) {
   const preview = useRef<HTMLDivElement>(null);
   const player = useRef<HTMLVideoElement>(null);
   const [visible, setVisible] = useState(false);
@@ -12,6 +12,15 @@ export default function PromptExample({ id, videoUrl, source }: { id: string; vi
   const [manualPlayback, setManualPlayback] = useState(false);
   const [loading, setLoading] = useState(Boolean(videoUrl || source));
   const available = Boolean(videoUrl || source);
+
+  useEffect(() => {
+    const video = player.current;
+    if (!video) return;
+    if (hovered) {
+      video.muted = true;
+      void video.play().catch(() => {});
+    } else video.pause();
+  }, [hovered, media?.videoUrl, visible]);
 
   useEffect(() => {
     const el = preview.current;
@@ -42,16 +51,14 @@ export default function PromptExample({ id, videoUrl, source }: { id: string; vi
     return () => { canceled = true; };
   }, [visible, source, id, videoUrl]);
 
-  return <div ref={preview} className="relative aspect-video overflow-hidden border-b border-edge-soft bg-black"
-    onMouseEnter={() => { if (!manualPlayback) void player.current?.play().catch(() => {}); }}
-    onMouseLeave={() => { if (!manualPlayback && !document.fullscreenElement) player.current?.pause(); }}>
+  return <div ref={preview} className="relative aspect-video overflow-hidden border-b border-edge-soft bg-black">
     {media?.videoUrl && visible ? <>
-      <video ref={player} controls={manualPlayback} muted loop playsInline preload="metadata" poster={media.poster}
+      <video ref={player} controls={manualPlayback || hovered} muted loop playsInline preload="metadata" poster={media.poster}
         src={`${media.videoUrl}#t=0.1`} aria-label="Prompt video preview"
-        onLoadedData={() => setLoading(false)} onError={() => { setError(true); setLoading(false); }}
+        onLoadedData={() => { setLoading(false); if (hovered) void player.current?.play().catch(() => {}); }} onError={() => { setError(true); setLoading(false); }}
         onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
         className="h-full w-full object-contain" />
-      {(!playing || !manualPlayback) && !loading && !error && <button aria-label="Play video preview" onClick={() => { setManualPlayback(true); void player.current?.play().catch(() => {}); }}
+      {!playing && !loading && !error && <button aria-label="Play video preview" onClick={() => { setManualPlayback(true); void player.current?.play().catch(() => {}); }}
         className="absolute top-1/2 left-1/2 grid size-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-4 border-white bg-sky-500 text-white shadow-lg hover:bg-sky-400">
         <svg aria-hidden="true" viewBox="0 0 24 24" className="ml-1 size-8 fill-current"><path d="M7 3v18l16-9z" /></svg>
       </button>}

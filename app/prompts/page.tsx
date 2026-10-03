@@ -19,6 +19,7 @@ export default function PromptsPage() {
   const [personal, setPersonal] = useState(false);
   const [selected, setSelected] = useState<PromptEntry | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [hoveredPromptId, setHoveredPromptId] = useState<string | null>(null);
   const titleInput = useRef<HTMLInputElement>(null);
   const opener = useRef<HTMLElement | null>(null);
   const [title, setTitle] = useState('');
@@ -103,8 +104,10 @@ export default function PromptsPage() {
         {message && !editorOpen && <p role="status" className="mb-4 text-sm text-warn">{message}</p>}
         {!loaded && <p className="text-faint">Loading prompts…</p>}
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,260px),1fr))] items-start gap-4">
-          {shown.map(e => <article key={e.id} aria-label={e.title} className={`overflow-hidden rounded-2xl border bg-panel ${editorOpen && selected?.id === e.id ? 'border-accent/60' : 'border-edge-soft'}`}>
-            <PromptExample id={e.id} videoUrl={e.videoUrl} source={e.source} />
+          {shown.map(e => <article key={e.id} aria-label={e.title}
+            onMouseEnter={() => setHoveredPromptId(e.id)} onMouseLeave={() => setHoveredPromptId(null)}
+            className={`overflow-hidden rounded-2xl border bg-panel ${editorOpen && selected?.id === e.id ? 'border-accent/60' : 'border-edge-soft'}`}>
+            <PromptExample id={e.id} videoUrl={e.videoUrl} source={e.source} hovered={hoveredPromptId === e.id} />
             <div className="p-4">
             <div className="flex items-start justify-between gap-2"><h2 className="line-clamp-2 text-sm font-bold">{e.title}</h2>
               <button aria-label={e.favorite ? 'Unfavorite prompt' : 'Favorite prompt'} onClick={() => void favorite(e)} className={e.favorite ? 'text-accent' : 'text-faint'}>{e.favorite ? '★' : '☆'}</button></div>

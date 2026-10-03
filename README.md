@@ -23,7 +23,9 @@ The Prompts document uses a no-referrer policy because X's media host rejects
 third-party referrers; this also applies to navigation from inside the app.
 
 The Prompts page shows previews directly in a responsive card grid. Direct
-video previews load near the viewport and play muted on hover; player controls
+video previews load near the viewport and play muted when hovering anywhere
+on a card. Leaving the card pauses playback, including manually started videos;
+moving to another card switches the preview to that card. Player controls
 allow normal playback. Cards with media appear first, and **With video** filters
 out templates without an example source. The count shows filtered versus total
 entries: 163 upstream entries plus 40 original templates (203 before personal
