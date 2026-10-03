@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+@keyframes prompt-editor-enter {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.prompt-editor-enter { animation: prompt-editor-enter 180ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .prompt-editor-enter { animation: none; }
+}
+
 /*
  * Zinho Automates — dark studio theme.
  *

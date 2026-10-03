@@ -13,10 +13,23 @@ in the studio before generating. Shorten the duration and script to reduce cost.
 The library also includes 163 attributed prompts from the EvoLinkAI collection,
 including its Commercial / Product category. Search by text/author, filter
 categories, favorite prompts, customize text and save personal variants to SQLite.
-**Watch example** plays upstream sample videos inside the app. Entries without
-a direct video URL use X's official embedded tweet widget. If X or the source
-blocks playback, the original source link remains available. Media is streamed
-from its original host and is not copied into the repository.
+Examples play in native video players, without X post embeds. A server route
+resolves public X embed metadata for catalogue entries and caches the MP4 URL
+and poster. Media streams from its original host and is not copied into the
+repository. X's public metadata endpoint is undocumented and can change or
+stop returning deleted/restricted videos; unavailable examples are labeled,
+with the original source link below the card. No API key or generation is used.
+The Prompts document uses a no-referrer policy because X's media host rejects
+third-party referrers; this also applies to navigation from inside the app.
+
+The Prompts page shows previews directly in a responsive card grid. Direct
+video previews load near the viewport and play muted on hover; player controls
+allow normal playback. Cards with media appear first, and **With video** filters
+out templates without an example source. The count shows filtered versus total
+entries: 163 upstream entries plus 40 original templates (203 before personal
+prompts). Upstream includes some repeated cases; language editions repeat the
+same collection. **Customize** opens the editor in a right-side
+drawer; close it with the close button or Escape. It starts hidden.
 See [third-party notices](THIRD_PARTY_NOTICES.md). `npm run prompts:sync`
 refreshes the checked-in catalogue and license from upstream with format checks.
 

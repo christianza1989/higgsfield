@@ -1,60 +1,66 @@
 "use client";
 import { useEffect, useRef, useState } from 'react';
+import type { PromptMedia } from '@/lib/prompt-media';
 
-interface TwitterWidgets {
-  widgets: { createTweet(id: string, target: HTMLElement, options: Record<string, unknown>): Promise<HTMLElement | undefined> };
-}
-let widgetPromise: Promise<TwitterWidgets> | undefined;
-function loadWidgets() {
-  const w = window as Window & { twttr?: TwitterWidgets };
-  if (w.twttr?.widgets?.createTweet) return Promise.resolve(w.twttr);
-  if (widgetPromise) return widgetPromise;
-  widgetPromise = new Promise<TwitterWidgets>((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://platform.twitter.com/widgets.js'; script.async = true;
-    const timer = setTimeout(() => { widgetPromise = undefined; reject(new Error('X embed timed out')); }, 15_000);
-    script.onload = () => {
-      clearTimeout(timer);
-      if (w.twttr?.widgets?.createTweet) resolve(w.twttr);
-      else { widgetPromise = undefined; reject(new Error('X embed unavailable')); }
-    };
-    script.onerror = () => { clearTimeout(timer); widgetPromise = undefined; reject(new Error('X embed blocked')); };
-    document.head.appendChild(script);
-  });
-  return widgetPromise;
-}
-
-export default function PromptExample({ videoUrl, source }: { videoUrl?: string; source?: string }) {
-  const container = useRef<HTMLDivElement>(null);
+export default function PromptExample({ id, videoUrl, source }: { id: string; videoUrl?: string; source?: string }) {
+  const preview = useRef<HTMLDivElement>(null);
+  const player = useRef<HTMLVideoElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [media, setMedia] = useState<PromptMedia | null>(source ? null : { videoUrl });
   const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(!videoUrl);
-  let tweetId: string | undefined;
-  try {
-    const url = new URL(source ?? '');
-    if (['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com'].includes(url.hostname)) tweetId = url.pathname.match(/\/status\/(\d+)/)?.[1];
-  } catch { /* no source */ }
+  const [playing, setPlaying] = useState(false);
+  const [manualPlayback, setManualPlayback] = useState(false);
+  const [loading, setLoading] = useState(Boolean(videoUrl || source));
+  const available = Boolean(videoUrl || source);
+
   useEffect(() => {
-    if (videoUrl || !tweetId || !container.current) return;
+    const el = preview.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setVisible(true);
+      else player.current?.pause();
+    }, { rootMargin: '150px' });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible || !source) return;
     let canceled = false;
-    const host = document.createElement('div');
-    container.current.replaceChildren(host);
-    setLoading(true); setError(false);
-    const timer = setTimeout(() => { if (!canceled) { setLoading(false); setError(true); } }, 20_000);
-    void loadWidgets().then(api => {
+    void fetch(`/api/prompt-video?id=${encodeURIComponent(id)}`).then(async res => {
+      if (!res.ok) throw new Error('Preview unavailable');
+      return await res.json() as PromptMedia;
+    }).then(result => {
       if (canceled) return;
-      return api.widgets.createTweet(tweetId!, host, { theme: 'dark', dnt: true, conversation: 'none', width: 360 });
-    }).then(el => {
+      setMedia(result); setError(!result.videoUrl);
+      if (!result.videoUrl) setLoading(false);
+    }).catch(() => {
       if (canceled) return;
-      clearTimeout(timer); setLoading(false); setError(!el);
-    }).catch(() => { if (!canceled) { clearTimeout(timer); setLoading(false); setError(true); } });
-    return () => { canceled = true; clearTimeout(timer); host.remove(); };
-  }, [tweetId, videoUrl]);
-  if (!videoUrl && !tweetId) return null;
-  return <section className="mb-5 rounded-xl border border-edge-soft bg-bg p-3">
-    <h3 className="mb-2 text-sm font-bold">Original video example</h3>
-    {videoUrl ? <video controls playsInline preload="none" src={videoUrl} onError={() => setError(true)} className="max-h-96 w-full rounded-lg" /> : <div ref={container} className="min-h-24" />}
-    {loading && <p className="text-xs text-faint">Loading X example…</p>}
-    {error && <p role="status" className="mt-2 text-xs text-warn">The example could not load. The source may be unavailable or blocked by your browser. {source && <a href={source} target="_blank" rel="noreferrer" className="underline">Open original source ↗</a>}</p>}
-    {!videoUrl && <p className="mt-2 text-2xs text-faint">Embedded from X. Playback depends on X availability.</p>}
-  </section>;
+      setMedia({ videoUrl }); setError(!videoUrl);
+      if (!videoUrl) setLoading(false);
+    });
+    return () => { canceled = true; };
+  }, [visible, source, id, videoUrl]);
+
+  return <div ref={preview} className="relative aspect-video overflow-hidden border-b border-edge-soft bg-black"
+    onMouseEnter={() => { if (!manualPlayback) void player.current?.play().catch(() => {}); }}
+    onMouseLeave={() => { if (!manualPlayback && !document.fullscreenElement) player.current?.pause(); }}>
+    {media?.videoUrl && visible ? <>
+      <video ref={player} controls={manualPlayback} muted loop playsInline preload="metadata" poster={media.poster}
+        src={`${media.videoUrl}#t=0.1`} aria-label="Prompt video preview"
+        onLoadedData={() => setLoading(false)} onError={() => { setError(true); setLoading(false); }}
+        onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+        className="h-full w-full object-contain" />
+      {(!playing || !manualPlayback) && !loading && !error && <button aria-label="Play video preview" onClick={() => { setManualPlayback(true); void player.current?.play().catch(() => {}); }}
+        className="absolute top-1/2 left-1/2 grid size-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-4 border-white bg-sky-500 text-white shadow-lg hover:bg-sky-400">
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="ml-1 size-8 fill-current"><path d="M7 3v18l16-9z" /></svg>
+      </button>}
+    </> : !available || error ? <div className="flex h-full flex-col items-center justify-center gap-2 bg-panel-2 px-4 text-center">
+      <svg viewBox="0 0 24 24" className="size-8 text-faint" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="3" y="4" width="18" height="16" rx="3" /><path d="m10 8 6 4-6 4z" /></svg>
+      <p role={error ? 'status' : undefined} className="text-xs text-muted">{error ? 'Video example unavailable' : 'No video example yet'}</p>
+      <p className="text-2xs text-faint">{error ? 'The original host did not provide a playable video.' : 'Editable prompt template'}</p>
+    </div> : null}
+    {error && media?.videoUrl && <p role="status" className="absolute inset-x-0 bottom-0 bg-black/80 p-3 text-center text-xs text-muted">Video example unavailable</p>}
+    {available && loading && !error && <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-muted">Loading video…</p>}
+  </div>;
 }
