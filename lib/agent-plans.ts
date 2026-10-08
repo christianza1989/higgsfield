@@ -7,7 +7,7 @@ import { referenceLabel, validateReferences, withReferenceRoles, type VideoRefer
 import { newAdPlan, generationDuration } from './ad-plan';
 import { parseGenerationRequest } from './payload';
 import type { AgentBrief, AgentPackage } from './agent-contract';
-import { speechLanguageEvidence } from './seedance-speech';
+import { speechLanguageEvidence, referenceSpeechDirection, REFERENCE_AUDIO_DESIGN } from './seedance-speech';
 
 export const AGENT_DIR = path.join(process.cwd(), 'storage', 'agent-plans');
 export class AgentError extends Error { constructor(message: string, public status = 400) { super(message); } }
@@ -133,14 +133,16 @@ export function compileAgentBrief(brief: AgentBrief, origin = 'http://127.0.0.1:
   try { validateReferences(refs, 'references'); } catch (e) { blockers.push((e as Error).message); }
   let t = 0; const shots = brief.scenes.map(s => { const start = t; t += s.duration; return `[${start}–${t}s] ${s.action} Camera: ${s.camera}`; });
   const audioLabel = refs.findIndex(r => r.kind === 'audio');
+  const audioDesign = brief.audio.soundscape ?? (brief.audio.mode === 'reference' ? REFERENCE_AUDIO_DESIGN : 'Natural room/scene tone; no music or additional voices. Keep dialogue clearly audible.');
   const prompt = withReferenceRoles([
     `Create a ${generationDuration(plan)}-second ${brief.format.aspectRatio} video.`,
     `BRIEF: ${brief.request}`, `SUBJECT: ${brief.subject.description}`,
+    brief.audio.mode === 'reference' ? `AUDIO POLICY: ${audioDesign}` : '',
     `LOCATION AND VIEWPOINT: ${brief.location.name}. ${brief.location.viewpoint}. Copy architecture and geography only from the assigned reference roles; do not merge contradictory viewpoints.`,
     'CONTINUITY: Keep the same speaker, clothing, location, lighting and props. Believable skin and physical movement. Use the camera movement specified per shot.', ...shots,
     brief.audio.mode === 'silent' ? 'AUDIO: Silent video. Render the requested visual actions without generated audio.' : brief.audio.mode === 'original' ? 'AUDIO: Silent non-speaking footage. Approved voiceover will be added locally in editing; do not attempt visible lip sync to an unprovided recording.' : !brief.dialogue.text ? 'AUDIO: Generate only the requested non-speaking soundscape. No intelligible dialogue or invented narration.' :
-      `DIALOGUE (${brief.dialogue.language}, verbatim): ${JSON.stringify(brief.dialogue.text)}. DELIVERY: ${brief.dialogue.delivery}. ${brief.audio.mode === 'reference' && audioLabel >= 0 ? `${referenceLabel(refs, audioLabel, 'references')} is the complete approved dialogue soundtrack, not a voice sample or music reference. Follow its exact words, speech order, pauses, pronunciation and speaker assignments. Synchronize mouth opening, closures and articulation to its syllables. Keep mouths still during pauses. Do not change the language, paraphrase, stretch or repeat the speech.` : 'Generate consistent original voices for the described speakers with synchronized visible speech. Preserve each speaker assignment across shots.'} No unrequested translation, extra words or competing voices. Keep speaking faces clearly visible and unoccluded when mouth alignment is required.`,
-    ['native','reference'].includes(brief.audio.mode) ? `AUDIO DESIGN: ${brief.audio.soundscape ?? 'Natural room/scene tone; no music or additional voices. Keep dialogue clearly audible.'}` : '',
+      `DIALOGUE (${brief.dialogue.language}, verbatim): {${JSON.stringify(brief.dialogue.text)}}. DELIVERY: ${brief.dialogue.delivery}. ${brief.audio.mode === 'reference' && audioLabel >= 0 ? referenceSpeechDirection(referenceLabel(refs, audioLabel, 'references')) : 'Generate consistent original voices for the described speakers with synchronized visible speech. Preserve each speaker assignment across shots.'} No unrequested translation, extra words or competing voices. Keep speaking faces clearly visible and unoccluded when mouth alignment is required.`,
+    ['native','reference'].includes(brief.audio.mode) ? `AUDIO DESIGN: ${audioDesign}` : '',
     `FINISH: ${brief.finishing ?? 'Preserve the requested visual style; no extra text or unrequested logos.'} Do not invent news attribution or present this synthetic scene as evidence of a real interview or endorsement.`,
     brief.scenes.some(s => s.caption) ? 'EDITING CAPTIONS: Scene captions will be added deterministically in local editing. Do not bake them into the model video.' : '',
     t < generationDuration(plan) ? `Hold the ending until ${generationDuration(plan)}s; trim the visual tail to ${t}s in editing.` : '',

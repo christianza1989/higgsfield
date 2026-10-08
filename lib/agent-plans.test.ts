@@ -5,7 +5,9 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { parseAgentBrief, compileAgentBrief, assertAgentRequest, AgentError } from './agent-plans';
 import { agentJobId, parseAgentAuthorization } from './agent-generation';
-import { ASSET_DIR, saveAsset } from './reference-assets';
+import { ASSET_DIR, saveAsset, readAsset, assetPath } from './reference-assets';
+import { importVoiceover } from './voiceover-import';
+import { referenceInputs, type VideoReference } from './video-references';
 import { speechLanguageEvidence } from './seedance-speech';
 const example = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'docs', 'agent-brief.example.json'), 'utf8'));
 
@@ -88,4 +90,57 @@ test('native sound-only scenes do not require speech or invent a language warnin
   assert.equal((pkg.generationRequest?.params as Record<string, unknown>).generate_audio, true);
   brief.audio.soundscape = undefined;
   assert.match(compileAgentBrief(brief).blockers.join(' '), /non-speaking soundscape/);
+});
+
+test('finished fractional dialogue reaches the talking package unchanged, with reference roles and no default extra ambience', async () => {
+  const duration = 19.52, text = 'Em... Aš visada rūpinuosi savo grožiu.';
+  const sourceJobId = 'reference-test-' + randomUUID();
+  const bytes = Buffer.alloc(44 + Math.round(duration * 24000) * 2);
+  bytes.write('RIFF'); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write('WAVEfmt ', 8);
+  bytes.writeUInt32LE(16, 16); bytes.writeUInt16LE(1, 20); bytes.writeUInt16LE(1, 22);
+  bytes.writeUInt32LE(24000, 24); bytes.writeUInt32LE(48000, 28); bytes.writeUInt16LE(2, 32); bytes.writeUInt16LE(16, 34);
+  bytes.write('data', 36); bytes.writeUInt32LE(bytes.length - 44, 40);
+  const form = new FormData();
+  form.append('file', new Blob([bytes], { type: 'audio/wav' }), 'voiceover.wav');
+  form.append('manifest', JSON.stringify({ schemaVersion: 1, source: 'voiceovers', sourceJobId, status: 'completed', text, language: 'Lithuanian', durationSeconds: duration }));
+  const imported = (await importVoiceover(new Request('http://127.0.0.1:3000/api/voiceover-import', {
+    method: 'POST', headers: { 'X-Voiceover-Client': 'voiceovers-v1' }, body: form,
+  }))).data;
+  const asset = readAsset(imported.asset.assetId);
+  // Synthetic fixture, not a live voice/lip-sync or cloud publication test.
+  saveAsset({ ...asset, url: 'https://example.com/finished-dialogue.wav' });
+  try {
+    const brief = parseAgentBrief({ ...example,
+      location: { name: 'Invented square', viewpoint: 'Eye-level medium shot', minimumReferences: 0 },
+      dialogue: { text, language: 'Lithuanian', delivery: 'Street interview' },
+      audio: { mode: 'reference', voiceoverImportId: imported.importId },
+      scenes: [{ duration, action: 'The presenter speaks to an off-camera interviewer.', camera: 'Steady medium shot.' }],
+    });
+    const pkg = compileAgentBrief(brief);
+    assert.equal(pkg.status, 'ready', pkg.blockers.join('; '));
+    const params = pkg.generationRequest?.params as Record<string, unknown>;
+    assert.equal(params.duration, 20);
+    assert.equal(params.generate_audio, true);
+    assert.equal(pkg.adPlan.voiceDuration, duration);
+    assert.deepEqual(fs.readFileSync(assetPath(asset)), bytes);
+    assert.deepEqual(referenceInputs(pkg.generationRequest!.references as VideoReference[]), [
+      { type: 'audio_url', audio_url: { url: 'https://example.com/finished-dialogue.wav' } },
+    ]);
+    assert.ok(pkg.prompt.includes(`DIALOGUE (Lithuanian, verbatim): {${JSON.stringify(text)}}`));
+    assert.match(pkg.prompt, /@Audio1 supplies the complete spoken dialogue/);
+    assert.match(pkg.prompt, /breathing and hesitation timing/);
+    assert.match(pkg.prompt, /lip closures and jaw articulation/);
+    assert.match(pkg.prompt, /Do not add a second ambience layer/);
+    assert.match(pkg.prompt, /trim the visual tail to 19.52s/);
+    assert.equal(pkg.capabilities.exactLipSync, false);
+    brief.audio.soundscape = 'Add the requested quiet birdsong; no music.';
+    const custom = compileAgentBrief(brief);
+    assert.match(custom.prompt, /Add the requested quiet birdsong/);
+    assert.ok(!custom.prompt.includes('Do not add a second ambience layer'));
+    brief.scenes[0].duration = 19;
+    assert.match(compileAgentBrief(brief).blockers.join(' '), /measured voiceover length/);
+  } finally {
+    for (const file of [assetPath(asset), path.join(ASSET_DIR, asset.assetId + '.json'),
+      path.join(process.cwd(), 'storage', 'voiceover-imports', imported.importId + '.json')]) fs.unlinkSync(file);
+  }
 });

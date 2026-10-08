@@ -1,0 +1,90 @@
+{
+  "date": "2026-10-08",
+  "scope": "Research plus subsequent native implementation; no supplied YouTube speaker cloned.",
+  "implementation_update": {
+    "date": "2026-10-08",
+    "entrypoint": "C:/Users/Lenovo/Documents/Voiceovers/desktop/youtube_cli.py",
+    "features": ["GUI and CLI exact intervals", "Bounded automatic Silero VAD selection", "30/60/120 second IVC samples", "Opt-in cached Scribe speaker segmentation", "Optional IVC noise removal", "Durable sample reuse and unknown clone recovery", "Explicit experimental Lithuanian Voice Changer"],
+    "offline_verification": "48 tests; Ruff, compileall, pip check and 15 layout states passed",
+    "live_local_extraction": {"exact_interval_seconds": [10, 40], "automatic_interval_seconds": [29, 149], "automatic_speech_coverage": 0.948, "comparison_correlation": 0.9953, "codec_timing_offset_seconds": 0.008},
+    "not_live_verified": ["Scribe scopes and output", "Lithuanian Voice Changer quality", "A clone of the supplied YouTube speaker", "Speaker identity"],
+    "note": "The original findings/design below describe the pre-implementation state. Manual times take precedence; absent Scribe, voice identity and all music are not reliably checked."
+  },
+  "example": {
+    "url": "https://www.youtube.com/watch?v=KBzOUVTIQlw",
+    "metadata_check": "yt-dlp, skip-download, no cookies or credentials",
+    "title": "Tiesiogiai: prezidento Gitano Nausėdos komentaras po Valstybės gynimo tarybos posėdžio",
+    "channel": "Delfi",
+    "duration_seconds": 2022,
+    "language": "lt",
+    "availability": "public",
+    "speech_start_seconds_reported_by_user": 10,
+    "speech_start_independently_verified": false,
+    "candidate_quick_interval_seconds": [10, 40],
+    "candidate_quality_interval_seconds": [10, 130],
+    "intervals_are": "Candidates based on the user's start time; not verified best segments or single-speaker intervals."
+  },
+  "current_implementation": {
+    "youtube_file": "C:/Users/Lenovo/Documents/Voiceovers/desktop/youtube.py",
+    "download_interval": "Always 0–30 seconds; URL timestamps discarded",
+    "import_file": "C:/Users/Lenovo/Documents/Voiceovers/desktop/audio.py",
+    "reference_interval": "First 30 seconds of local input; validation 10–30 seconds",
+    "elevenlabs_file": "C:/Users/Lenovo/Documents/Voiceovers/desktop/elevenlabs.py",
+    "ivc_sample_validation": "10–30 seconds, an application choice rather than a provider quality recommendation",
+    "tts": "eleven_v3, language_code lt; corrected Unicode text",
+    "missing": ["Speech onset detection", "Speaker segmentation", "Quality ranking", "Selectable sample start", "60–120 second IVC quality mode", "Measured delivery profile"]
+  },
+  "findings": [
+    {
+      "capability": "Instant Voice Cloning",
+      "finding": "Can reflect voice identity, accent and broad delivery tendencies. Exact performance on a different script is not guaranteed. Quality and consistency of samples matter; official guidance recommends 1–2 minutes of clean speech, while 30 seconds can work.",
+      "source": "https://elevenlabs.io/docs/eleven-creative/voices/voice-cloning/instant-voice-cloning"
+    },
+    {
+      "capability": "Voice Changer",
+      "finding": "Converts a supplied performance into a selected voice. Its source recording supplies words, cadence, accent, timing and emotion; a separate YouTube reference is not an arbitrary style-transfer input for a new text.",
+      "sources": ["https://elevenlabs.io/docs/overview/capabilities/voice-changer", "https://github.com/elevenlabs/skills/blob/main/voice-changer/SKILL.md"]
+    },
+    {
+      "capability": "Lithuanian model compatibility",
+      "finding": "Lithuanian is documented for v3/v4 TTS. The documented eleven_multilingual_sts_v2 Voice Changer list excludes Lithuanian; any LT conversion must be treated as an experiment, not a supported production guarantee. v4 is documented as available via Text to Dialogue; do not replace the working v3 adapter by changing only its model string.",
+      "source": "https://elevenlabs.io/docs/overview/models",
+      "account_model_list_check": "Authenticated GET /v1/models returned 401; actual v4 account availability was not established. No permissions expanded."
+    },
+    {
+      "capability": "Speech segmentation",
+      "finding": "Local Silero VAD can locate speech intervals. ElevenLabs Scribe v2 supplies word timestamps and speaker labels; diarization segments speakers but does not physically remove overlapping voices.",
+      "sources": ["https://github.com/snakers4/silero-vad", "https://elevenlabs.io/docs/api-reference/speech-to-text/convert"]
+    },
+    {
+      "capability": "Noise removal",
+      "finding": "IVC has remove_background_noise and a separate isolation endpoint exists. Enable cleanup only when needed and compare before/after; the IVC docs warn it may worsen clean samples.",
+      "sources": ["https://elevenlabs.io/docs/api-reference/voices/ivc/create", "https://elevenlabs.io/docs/api-reference/audio-isolation/convert/"]
+    },
+    {
+      "capability": "Voice Remixing",
+      "finding": "Can adjust a voice variant's accent, pacing and style from a textual description. It does not document automatic exact mannerism extraction from a separate reference video; not the default path.",
+      "source": "https://elevenlabs.io/docs/overview/capabilities/voice-remixing"
+    }
+  ],
+  "recommended_design": {
+    "status": "Proposed engineering approach, not a tested algorithm",
+    "workflow": [
+      "Accept YouTube URL and optional start time; preserve a manual 0:10 override.",
+      "Fetch bounded audio windows with existing yt-dlp/FFmpeg. Begin with a proposed 180-second analysis budget, expand in bounded windows only if insufficient speech; do not automatically transcribe the entire 33m42s example.",
+      "Use local VAD to exclude silence and non-speech intros. Music can fool simple volume/silence thresholds, so RMS alone is not sufficient.",
+      "Segment speakers using Scribe timestamps when multiple speakers are present. Select the intended speaker; dominant speaker is only a default heuristic, not proof of identity. Avoid overlap rather than claiming diarization isolates it.",
+      "Rank candidate intervals by single-speaker speech coverage, noise, clipping, sentence boundaries and consistent desired delivery. These are proxies; the best clone still requires listening validation.",
+      "Quick mode chooses the best 30-second sample, not the first 30 seconds. Quality mode targets 60–120 seconds of the same speaker and consistent performance; do not change Google's separate 30-second contract.",
+      "Preserve short natural pauses and breaths. Avoid excessive noise processing, artificial speed/pitch changes and mixing shouting with calm narration in one sample. Avoid unnecessary MP3 re-encoding before IVC.",
+      "Create IVC once with durable pending-state recovery. Save source URL, selected intervals, sample hash and selection metrics. Reuse the clone for later requests.",
+      "For new Lithuanian text, proofread then use the existing v3/lt path. Store a delivery profile (tempo, pause statistics and cautiously inferred style) as guidance, not an exact accent/mannerism guarantee.",
+      "For exact delivery, obtain a performance recording of the requested new words and consider Voice Changer only after a Lithuanian quality experiment. Existing YouTube words cannot become a different script through voice conversion alone."
+    ],
+    "credentials": "Current key was configured for Voices and TTS. Scribe, isolation or Voice Changer may need separate scopes; do not broaden permissions during research.",
+    "cost_controls": "VAD and ranking local; billable Scribe/cleanup limited to analysis windows and cached by source hash. Do not create multiple clones or paid auditions automatically.",
+    "acceptance_cases": ["10-second silent intro", "Music before speech", "Two-speaker interview", "Overlapping speech", "Too little clean speech", "Manual timestamp override", "Natural breaths retained", "No duplicate clone after unknown response", "Lithuanian text and brand preservation"]
+  },
+  "verified_now": ["Official provider capability contracts inspected", "Example YouTube metadata retrieved", "Current local implementation reviewed"],
+  "not_verified": ["Audio onset or optimal sample in the example", "Automatic quality ranking accuracy", "Lithuanian Voice Changer performance", "v4 account access and output quality", "Exact mannerism preservation on new dialogue"]
+}

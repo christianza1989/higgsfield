@@ -13,6 +13,7 @@ import { LogoTile } from "./Logo";
 
 const NAV = [
   { href: "/", label: "Home", icon: HomeIcon },
+  { href: "/create", label: "Kurti video", icon: VideoIcon },
   { href: "/image", label: "Image", icon: ImageIcon },
   { href: "/video", label: "Video", icon: VideoIcon },
   { href: "/ads", label: "Ad planner", icon: VideoIcon },

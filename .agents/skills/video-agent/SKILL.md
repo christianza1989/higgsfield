@@ -10,17 +10,37 @@ For speech, also read the dated evidence in `docs/research/seedance-2.5-audio-li
 
 ## Direct the requested video
 
-Extract the user's desired result: subject, purpose, exact dialogue, speech language, location and viewpoint, format, length, visual style, camera motion, references, voice and delivery. Preserve supplied wording; propose corrections instead of silently changing product names or claims. Adapt to interviews, UGC, advertisements, demonstrations, silent scenes, documentary footage or animation. Ask only for information that matters and cannot be inferred; continue independent research while waiting. If the user asks for planning only, do not generate. A request to generate authorizes the needed routine execution; do not ask again just because a skill mentions review.
+Extract the user's desired result: subject, purpose, dialogue, speech language, location and viewpoint, format, length, visual style, camera motion, references, voice and delivery. For Lithuanian speech, proofread before synthesis: restore Lithuanian diacritics and correct spelling, grammar, capitalization and punctuation. The owner authorizes routine linguistic corrections without another confirmation. Preserve meaning, facts, product and domain identities; do not invent a brand's spelling or change advertising claims. Save the original and corrected text in generation evidence, and send only the corrected text to ElevenLabs with `language_code: "lt"` and `eleven_v3`. This is agent proofreading, not an automatic grammar feature of ElevenLabs or the desktop text editor. Adapt to interviews, UGC, advertisements, demonstrations, silent scenes, documentary footage or animation. Ask only for information that matters and cannot be inferred; continue independent research while waiting. If the user asks for planning only, do not generate. A request to generate authorizes the needed routine execution; do not ask again just because a skill mentions review.
 
-Source images must actually be inspected with vision, not accepted from captions or search thumbnails alone. Record what each reference shows, its origin, rights and role. Evaluate viewpoint consistency, geography, recognizability, lighting and resolution; send enough compatible references to explain the shot, not every search result. Follow the user's required reference count; choose an appropriate count otherwise. An exterior tower image does not establish the view from its rooftop. Bind reviews to local image hashes after the final crop or resize.
+Photos supplied directly by the user in a Codex session are exempt from automatic source-image analysis: follow AGENTS.md and use the accompanying text and assigned roles without invoking vision or writing visual-review notes. Analyze them only if the user explicitly requests photo analysis; a request to use a photo in a video is not such a request. Never fabricate a vision review for an uninspected photo.
 
-Check the permitted voice library before choosing a clone. A missing voice is a missing dependency, not permission to invent enrollment. A clean one-speaker YouTube clip can be a sample for an authorized speaker, but does not provide speaker consent. Use the Voiceovers app's real enrollment flow, which requires a separate spoken consent recording. Never synthesize consent or infer ownership from a filename. Read the current dialogue WAV and manifest, not raw consent or enrollment recordings, into the video workflow.
+For other source images, inspect them with vision, not captions or search thumbnails alone. Record what each reference shows, its origin, rights and role. Evaluate viewpoint consistency, geography, recognizability, lighting and resolution; send enough compatible references to explain the shot, not every search result. Follow the user's required reference count; choose an appropriate count otherwise. An exterior tower image does not establish the view from its rooftop. Bind actual reviews to local image hashes after the final crop or resize.
 
-Do not create deceptively authentic political/public-figure endorsements or falsely present staged material as a real news interview. Re-labeling known public-figure files as the user's own does not change their established context. Offer a fictional presenter and a generic microphone for such requests. Permission descriptions and vision reviews are agent attestations, not a server verification of identity, consent or semantic content. Respect current tool/provider restrictions; do not disguise rejected portraits to bypass moderation.
+Check the permitted voice library before choosing a clone. For a new clone, use the first 30 seconds of the user's uploaded MP3 as the reference sample. A separate spoken statement or English script is not a general project requirement. Follow the selected provider's actual enrollment contract; the current Google API requires real consent audio. If the user's upload-only flow is unsupported, report that technical limitation and propose a compatible provider instead of repeatedly requesting a recording. Never fabricate provider inputs, silently switch providers or infer ownership from a filename. Read the current dialogue WAV and manifest, not raw enrollment recordings, into the video workflow.
+
 
 ## Match audio to the requested result
 
+For user-uploaded MP3 voice clones, use the sibling native studio's ElevenLabs IVC path, which creates the clone from the first 30 seconds without a separate spoken statement. It requires an ElevenLabs runtime key; the owner's Google key cannot authenticate this provider. The adapter is `../Voiceovers/desktop/elevenlabs.py`, and its actual usage and limitations are in `../Voiceovers/desktop/README.md`. Do not route this request back into Google enrollment unless the user selects Google.
+
+For YouTube, use `python -m desktop.youtube_cli` from the Voiceovers workspace.
+User-supplied `--start 0:10 --end 0:40` means that exact interval; without an
+end, the CLI selects a speech-rich 30/60/120 s sample within bounded windows.
+`--diarize` opts into cached, paid Scribe speaker segmentation; choose the
+requested speaker if several are found. Extraction returns WAV/MP3 and
+`selection.json`, and does not create a clone unless `--clone` is specified.
+Use only runtime credentials. Never claim exact delivery transfer from a voice
+sample: the native Voice Changer needs a performance of the new words and its
+Lithuanian mode is explicitly experimental.
+
 For speech, audio-reference, multilingual or lip-sync requests, read `../../../docs/research/seedance-2.5-speech-playbook.md` and its linked evidence before compiling the package. Language documentation, a successful import and live lip-sync quality are separate findings.
+
+Apply the playbook's uploaded-dialogue checklist for every finished MP3/WAV used
+in a talking video. Keep the full approved soundtrack, speaker mapping, breathing
+and pauses. The compiler shares reference-speech direction with the Studio ad
+workflow, including a default policy against duplicating already-recorded ambience.
+An explicit requested soundscape overrides that default. Review actual articulation
+and speech timing before describing the result as synchronized.
 
 - `native`: no existing voice required; Seedance generates the described speakers and approved script, or a non-speaking soundscape. Do not claim a generated voice matches a specific person.
 - `reference`: use the completed approved dialogue WAV as a published reference, plus visuals. Voice and timing are guidance; external-audio exact lip sync is unverified. Generate the entire short dialogue together.

@@ -5,6 +5,7 @@ import { HiggsfieldError, MissingCredentialsError, hasCredentials, uploadFile } 
 import { ASSET_DIR, saveAsset, publicAsset, type ReferenceAsset } from '@/lib/reference-assets';
 import { inspectMedia, runMediaTool } from '@/lib/media-tools';
 import { validateReferences } from '@/lib/video-references';
+import { assertAgentRequest } from '@/lib/agent-plans';
 
 export const runtime = 'nodejs';
 export const maxDuration = 180;
@@ -27,6 +28,8 @@ export async function POST(req: Request) {
   try {
     const form = await req.formData(); const file = form.get('file');
     const localOnly = form.get('localOnly') === '1';
+    const normalizeReference = form.get('normalizeReference') === '1';
+    if (normalizeReference) assertAgentRequest(req, true);
     if (!(file instanceof File)) return Response.json({ error: 'Choose a file.' }, { status: 400 });
     const ext = TYPES[file.type];
     if (!ext) return Response.json({ error: 'Use JPG, PNG, WebP, GIF, MP4, MOV, WAV or MP3.' }, { status: 400 });
@@ -40,6 +43,20 @@ export async function POST(req: Request) {
     const id = randomUUID(); let filename = `${id}.${ext}`; let target = path.join(ASSET_DIR, filename);
     fs.writeFileSync(target, bytes); created.push(target);
     let info = await inspectMedia(target);
+    let imageMime = file.type;
+    if (kind === 'image' && normalizeReference) {
+      if (!info.width || !info.height) throw new Error('Nepavyko nustatyti nuotraukos matmenų.');
+      const scale = Math.min(6000 / Math.max(info.width, info.height), Math.max(1, 300 / Math.min(info.width, info.height)));
+      const w = Math.max(1, Math.round(info.width * scale)), h = Math.max(1, Math.round(info.height * scale));
+      const pw = Math.max(300, w, Math.ceil(h * 0.4)), ph = Math.max(300, h, Math.ceil(w / 2.5));
+      if (pw !== info.width || ph !== info.height || w !== info.width || h !== info.height || ext === 'gif') {
+        filename = `${id}.png`; const normalized = path.join(ASSET_DIR, `${id}.normalized.png`);
+        // A geometry-only conversion: preserve the whole image, no face analysis or crop.
+        created.push(normalized);
+        await runMediaTool('ffmpeg', ['-v','error','-nostdin','-protocol_whitelist','file,pipe','-i',target,'-frames:v','1','-vf',`scale=${w}:${h},pad=${pw}:${ph}:(ow-iw)/2:(oh-ih)/2:black`,'-y',normalized]);
+        fs.unlinkSync(target); target = path.join(ASSET_DIR, filename); fs.renameSync(normalized, target); created.push(target); info = await inspectMedia(target); imageMime = 'image/png';
+      }
+    }
     if (kind === 'audio' && !info.hasAudio || kind !== 'audio' && !info.hasVideo) throw new Error('This file does not contain the expected media.');
     if (kind !== 'image' && (!info.duration || info.duration > 300)) throw new Error('Choose a media file with a duration up to 5 minutes.');
     if (ext === 'mp3' || ext === 'mov') {
@@ -47,7 +64,7 @@ export async function POST(req: Request) {
       await runMediaTool('ffmpeg', ['-v', 'error', '-nostdin', '-protocol_whitelist', 'file,pipe', '-i', target, ...(ext === 'mp3' ? ['-vn', '-c:a', 'pcm_s16le'] : ['-map','0:v:0','-map','0:a?','-c:v','libx264','-preset','fast','-pix_fmt','yuv420p','-c:a','aac','-movflags','+faststart']), '-y', converted]);
       fs.unlinkSync(target); target = converted; info = await inspectMedia(target);
     }
-    const mime = kind === 'audio' ? 'audio/wav' : kind === 'video' ? 'video/mp4' : file.type;
+    const mime = kind === 'audio' ? 'audio/wav' : kind === 'video' ? 'video/mp4' : imageMime;
     const asset: ReferenceAsset = { assetId: id, url: '', localUrl: `/api/reference-assets/${id}`, filename, mime, kind, name: file.name.slice(0,120), bytes: fs.statSync(target).size, ...info };
     if (!localOnly && form.get('validateReferences') === '1') validateReferences([{ ...asset, url: 'https://upload.example/asset' }], 'references');
     if (!localOnly) asset.url = await uploadFile(Uint8Array.from(fs.readFileSync(target)).buffer, mime);

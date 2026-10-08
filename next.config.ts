@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Keep production verification separate from a running development studio.
+  distDir: process.env.STUDIO_VERIFY_BUILD === '1' ? '.next-verify' : '.next',
   // better-sqlite3 is a native module and must not be bundled.
   serverExternalPackages: ["better-sqlite3"],
   // X's public video CDN rejects third-party Referer headers. Keep prompt

@@ -33,11 +33,54 @@ These are production recommendations, not additional documented model controls:
 3. Create the actual complete spoken recording. Listen to it, compare a transcript with the approved script and verify names, language, speaker count and delivery. For an unfamiliar language, obtain a competent listener's assessment when available; do not replace this with an unsupported assurance from ASR.
 4. Measure the recording with ffprobe and retain its original bytes. The local import format is mono PCM16 WAV at 24kHz, 5–30s. This is an application contract, not a Seedance-wide sample-rate requirement. Include meaningful pauses; do not accelerate speech automatically to meet a guessed duration.
 5. Plan the picture around those measured times. A continuous short monologue can use one complete generation. Split longer scripts at natural pauses; do not cut a word across requests. Reuse identity, wardrobe, scene and lighting descriptions across clips, and expect possible drift. Five-second clips are not inherently better than one 20-second request.
-6. Inspect reference pixels. Use only relevant, compatible character/location/product images with clear roles. A character photo describes appearance, a location photo describes geometry, and the WAV supplies the spoken performance. Do not flood the request with contradictory views. A face reference is optional for a newly invented presenter; provider portrait rules still apply.
+6. Assign compatible character/location/product images clear roles. Inspect externally sourced reference pixels; photos supplied directly by the user are exempt from automatic analysis under AGENTS.md, unless the user explicitly requests it. Never invent a review for them. A character photo describes appearance, a location photo describes geometry, and the WAV supplies the spoken performance. Do not flood the request with contradictory views. A face reference is optional for a newly invented presenter; provider portrait rules still apply.
 7. For a speaking shot, keep the mouth readable: medium or close framing, modest movement, minimal occlusion and enough time for articulation. Choose elaborate camera moves only when they support the requested scene. For multiple speakers, explicitly associate each line/time range with a visible character and keep the non-speaking characters silent.
 8. Request `ceil(actualSeconds)` from the model. Preserve fractional edit duration and trim the ending hold rather than stretching the WAV. For reference mode the published audio copy must have the same bytes and duration as the approved local recording.
 
-## Prompt layout for a prepared dialogue
+## Uploaded-dialogue checklist (implementation checked 2026-10-08)
+
+1. Distinguish a finished voiceover MP3 from a voice-cloning sample. A finished
+   recording does not need cloning or TTS again. Decode to the local PCM16 mono
+   24kHz WAV contract without changing speed; retain the source and measured
+   duration. Do not discard silence that carries intended pauses or breathing.
+2. Use the approved full dialogue and transcript in one reference-mode request
+   when within the app's 5–30s import limit. The official prompt guide recommends
+   5–10s for subject audio/video references; that is not an instruction to truncate
+   a longer completed monologue. For recordings over 30s, plan separate complete
+   utterances at natural pauses, with consistent identity and location.
+3. Map appearance, location and complete dialogue separately to the numbered
+   assets. Use a language-labelled dialogue section and `{}` dialogue notation.
+   Treat delivery tags as non-spoken instructions. Specify which visible person
+   owns each recorded voice; a single interview should keep one speaker.
+4. Request words, pronunciation, accent, emotion, breaths and hesitation timing
+   from the recording. Keep the mouth readable during speech, use relaxed lips
+   during non-speech pauses, and keep listeners silent. Restrained framing/head
+   motion is production guidance; it is not a documented synchronization control.
+5. Prefer a clean finished dialogue for a new recording; keep an already approved
+   outdoor mix when requested. Do not silently denoise, replace or strip its
+   ambience. Default reference audio policy keeps existing ambience and requests
+   no added second layer, music or competing voices. Repeat this audio policy near
+   the start and end, as the official guide recommends for unwanted music. An
+   explicit `audio.soundscape` remains authoritative.
+6. Keep the published WAV byte-identical to the import, use mixed references and
+   `generate_audio:true`, match edit time to PCM frames and round only model
+   duration upward. Do not invent `lip_sync`, forced-alignment, `draft`, native
+   BytePlus roles or adaptive-duration fields in the OpenRouter payload.
+7. Review the saved result's entire speech: words, pronunciation, voice, pauses,
+   breathing, visible lip/jaw movement and speaker assignments. Inspect doubtful
+   sections slowly. Record pass/fail/not-reviewed, never infer quality from HTTP
+   acceptance. Do not conceal a mismatch by replacing the generated audio.
+
+Rechecked official indexed [prompt-guide text](https://docs.byteplus.com/ko/docs/modelark/seedance-2-5-prompt-guide)
+and [tutorial](https://docs.byteplus.com/id/docs/modelark/seedance-2-5), plus the
+[OpenRouter submission schema](https://openrouter.ai/docs/api/api-reference/video-generation/submit-a-video-generation-request).
+BytePlus pages sometimes return only a JavaScript shell when opened; the indexed
+official text supplied the prompt recommendations. Direct BytePlus now documents
+draft-to-final reuse and a portrait-specific workflow; neither is integrated into
+this app's OpenRouter agent route. Do not promise direct upload of a real-person
+face is accepted or treat a 480p OpenRouter attempt as a reusable native draft.
+
+## Prompt example
 
 This example is authored production guidance. Replace placeholders with actual evidence and exact dialogue; placeholder URLs and timings are not ready inputs.
 

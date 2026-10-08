@@ -1,5 +1,6 @@
 import { referenceLabel, type VideoReference } from './video-references';
 import type { VoiceoverImport } from './voiceover-contract';
+import { referenceSpeechDirection, REFERENCE_AUDIO_DESIGN } from './seedance-speech';
 
 export interface AdScene {
   id: string;
@@ -81,11 +82,12 @@ export function buildAdPrompt(plan: AdPlan, sceneIndex?: number): string {
   return [
     `Create a ${duration}-second ${plan.aspectRatio} product advertisement.`,
     `PRODUCT: ${plan.product.trim()}`,
+    plan.audioMode === 'reference' ? `AUDIO POLICY: ${REFERENCE_AUDIO_DESIGN}` : '',
     plan.audience.trim() ? `AUDIENCE: ${plan.audience.trim()}` : '',
     plan.style === 'ugc' ? 'STYLE: Authentic phone-shot UGC, believable everyday environment, natural light and skin texture, restrained acting, practical product demonstration.' : 'STYLE: Cinematic product advertisement, controlled lighting, clear visual hierarchy, intentional camera movement.',
     'CONTINUITY: Keep the same product shape, packaging, colors and logo throughout; use the supplied reference roles. Keep character identity, clothing and environment consistent between shots. Show physical actions clearly.',
     ...shots,
-    plan.audioMode === 'reference' ? `AUDIO: ${voiceLabel} supplies the complete spoken dialogue, pacing, pauses and voice timbre. Follow its words and timing; synchronize the visible speaker's mouth movements with that audio. Keep one speaker and voice throughout. Invent an original fictional presenter unless an approved character reference is provided. No new dialogue, translation, music or competing voices. Generate matching video audio.` : plan.audioMode === 'generated' ? 'AUDIO: Generate the exact dialogue above with consistent voice, appropriate room tone and subtle sound effects. Keep music below speech.' : plan.audioMode === 'original' ? 'AUDIO: Silent visuals. Existing voiceover will be added unchanged in editing. Do not generate dialogue, lip movements for speech, music or sound effects.' : 'AUDIO: Silent visuals. Do not generate dialogue, music or sound effects.',
+    plan.audioMode === 'reference' ? `AUDIO: ${referenceSpeechDirection(voiceLabel)} Invent an original fictional presenter unless an approved character reference is provided. AUDIO DESIGN: ${REFERENCE_AUDIO_DESIGN}` : plan.audioMode === 'generated' ? 'AUDIO: Generate the exact dialogue above with consistent voice, appropriate room tone and subtle sound effects. Keep music below speech.' : plan.audioMode === 'original' ? 'AUDIO: Silent visuals. Existing voiceover will be added unchanged in editing. Do not generate dialogue, lip movements for speech, music or sound effects.' : 'AUDIO: Silent visuals. Do not generate dialogue, music or sound effects.',
     'FINISH: No baked-in subtitles, extra text, watermark or new logos. Leave room near the lower center for captions added in editing. Preserve product readability.',
   ].filter(Boolean).join('\n\n');
 }
