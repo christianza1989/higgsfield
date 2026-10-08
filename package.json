@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "agent": "node scripts/video-agent.mjs",
+    "check:agent": "tsx scripts/check-agent-workflow.ts",
     "prompts:sync": "node scripts/sync-prompts.mjs",
     "check:studio": "node scripts/check-studio.mjs",
     "check:ads": "tsx scripts/check-ad-workflow.ts",

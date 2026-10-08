@@ -381,6 +381,31 @@ API rejects.
 the accepted set is contiguous. An earlier version sampled only `[3,4,5,6,8,10,12]`, never
 saw 7/9/11/13-16, and so capped several models far below their real limit.
 
+## Video creation with an AI agent
+
+Open a Codex session in this project and describe the desired video. `AGENTS.md`
+routes it to [.agents/skills/video-agent/SKILL.md](.agents/skills/video-agent/SKILL.md).
+The external agent handles interpretation, reference search and pixel review; the local
+app validates files, voiceover timing and a genre-neutral generation package.
+
+Run `npm run agent -- capabilities` for the local API contract. The CLI supports
+voice-library lookup through the sibling Voiceovers browser service, local uploads,
+explicit reference publication, voiceover import, package preparation, review and
+budgeted generation. See the skill's `references/contract.md` for commands and the
+current boundaries. Preparing/loading a package starts no generation. Agent submission
+deduplicates the same immutable package, including failed or removed Library jobs.
+
+The real desktop-to-video 12s technical WAV handoff passed on2026-10-08. This proves
+local transport and idempotency, not Seedance mouth alignment. External audio is an
+experimental reference workflow; original soundtrack editing is a separate option.
+The dated evidence is in [the audio/lip-sync research](docs/research/seedance-2.5-audio-lipsync-2026-10-08.json).
+The [speech playbook](docs/research/seedance-2.5-speech-playbook.md) explains payloads,
+language coverage, completed voiceover preparation, scene timing and acceptance checks.
+It distinguishes audio guidance from unchanged soundtrack preservation, and includes
+non-speaking soundscapes as well as speaking scenes.
+BytePlus lists11native languages; the app does not claim every language or guaranteed
+external-audio lip sync. Credentials and media remain outside Git.
+
 ## Keyboard
 
 **Enter** sends the prompt. **Shift+Enter** inserts a line break. **⌘/Ctrl+Enter** also sends,

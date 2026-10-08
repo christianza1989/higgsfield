@@ -1,0 +1,79 @@
+{
+  "checkedOn": "2026-10-08",
+  "purpose": "Agent decisions for externally prepared speech, native speech and lip synchronization. No paid research generation was run.",
+  "conclusion": {
+    "audioReferenceSupported": "Documented through OpenRouter input_references, compatible BytePlus Seedance 2+ providers.",
+    "originalAudioPreservation": "No documented immutable-soundtrack guarantee in the reviewed unified API.",
+    "exactLipSync": "Prompted and quality-dependent; not verified with external WAV in this project.",
+    "allWorldLanguages": "Not documented. Native language coverage is explicitly listed; other languages need individual assessment.",
+    "localTransport": "Real Voiceovers desktop 12s PCM canary passed: duplicate import, page preview and identical local WAV hash. This is not evidence of model lip sync."
+  },
+  "languageEvidence": {
+    "source": "https://docs.byteplus.com/zh-TW/docs/modelark/seedance-2-5",
+    "access": "English route returned a JavaScript shell. Official indexed alternate-locale route supplied the English native-language statement.",
+    "documentedNativeLanguages": ["Chinese", "English", "Spanish", "Indonesian", "Malay", "Thai", "Arabic", "Portuguese", "Vietnamese", "Japanese", "Korean"],
+    "lithuanian": "Absent from this documented list; support and lip quality remain unverified, not proven impossible.",
+    "coverageMeaning": "A documented language is not a guarantee of pronunciation, dialect coverage, faithful cloning or word-perfect lip movement."
+  },
+  "providerMapping": {
+    "openrouter": {
+      "url": "https://openrouter.ai/docs/api/api-reference/video-generation/submit-a-video-generation-request",
+      "endpoint": "POST https://openrouter.ai/api/v1/videos",
+      "model": "bytedance/seedance-2.5",
+      "bodyExample": {
+        "model": "bytedance/seedance-2.5",
+        "prompt": "REFERENCE ROLES\n@Image1: Scene geometry and composition.\n@Audio1: Complete approved spoken dialogue, not music or a voice-enrollment sample.\n\nOne original fictional presenter speaks the exact approved text in its original language. Follow @Audio1 speech order, words, pronunciation and pauses; request syllable-aligned mouth movement. Keep the face unobstructed and mouths still during pauses. Do not translate, paraphrase, add music or additional speech.",
+        "duration": 8,
+        "resolution": "720p",
+        "aspect_ratio": "9:16",
+        "generate_audio": true,
+        "input_references": [
+          { "type": "image_url", "image_url": { "url": "https://example.com/approved-scene.jpg" } },
+          { "type": "audio_url", "audio_url": { "url": "https://example.com/approved-dialogue.wav" } }
+        ]
+      },
+      "roleMapping": "The unified input reference has type and media URL. Role-specific semantic instructions belong in the prompt; do not invent a per-reference native role field here.",
+      "frameMode": "Use mixed references for audio. This app keeps first/last-frame mode separate; do not silently combine incompatible modes.",
+      "urlRequirements": "Provider-accessible raw media URLs without a login or custom headers; remain valid through processing. Local127.0.0.1 URLs are not model inputs.",
+      "limitsAuthority": "The generic OpenRouter schema lists more sizes/resolutions than this model; use live model-specific capabilities."
+    },
+    "byteplusDirect": {
+      "url": "https://docs.byteplus.com/zh-CN/docs/modelark/create-video-generation-task-api?redirect=1",
+      "endpoint": "POST https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks",
+      "model": "dreamina-seedance-2-5-260628",
+      "mapping": "Native content array uses text/image_url/audio_url items and reference_image/reference_audio roles. This is a different request shape from OpenRouter, not a drop-in SDK payload.",
+      "limits": { "audioFormats": ["wav", "mp3"], "audioEachSeconds": [2,30], "audioCount": 10, "audioTotalSeconds": 30, "audioMaximumMB": 15, "imagesMaximum": 30, "assetsMaximum": 50 }
+    },
+    "higgsfield": {
+      "url": "https://open.higgsfield.ai/models/bytedance/seedance-2.5/reference-to-video/api-reference",
+      "mapping": "Dedicated reference-to-video API has its own image/audio/video URL arrays and provider schema. Do not infer its supported resolution/duration from OpenRouter or a marketing page.",
+      "currentUseInAgentFlow": "Cloud storage publication only; agent video jobs target OpenRouter explicitly."
+    }
+  },
+  "liveOpenRouterCatalog": {
+    "source": "https://openrouter.ai/api/v1/videos/models",
+    "canonicalSlug": "bytedance/seedance-2.5-20260807",
+    "durationSeconds": "Integers4–30",
+    "resolutions": ["480p", "720p"],
+    "pricingVideoToken": "0.0000107 USD, with or without generated audio",
+    "pricingVideoInputToken": "0.0000064 USD",
+    "warning": "A live catalog is capability/pricing metadata, not a successful audio-reference generation test."
+  },
+  "promptGuideEvidence": {
+    "source": "https://docs.byteplus.com/vi/docs/modelark/seedance-2-5-prompt-guide?redirect=1",
+    "audioMeaning": "Reference guidance includes dialogue, voice/timbre, music and rhythm. Assign the intended function explicitly.",
+    "knownIssues": "The guide discusses remaining source-language speech, wrong character/voice assignments and inaccurate target-language lip movements in translation tasks.",
+    "implication": "Detailed prompt constraints improve direction; examples asking for precise sync are not a universal guarantee or a force-align API.",
+    "inference": "For a prepared talking soundtrack, keep one clearly mapped speech track, exact transcript and measured length; evaluate the resulting video directly."
+  },
+  "agentProtocol": {
+    "sourcePreparation": "Use the finished approved dialogue, not the enrollment sample. Check full transcript, one-speaker quality when appropriate, pauses, pronunciation and actual duration. Keep native script and original language names.",
+    "audioModeDecision": "Reference mode regenerates output audio; original mode adds the untouched soundtrack locally to silent non-speaking footage. Native mode invents speech. None may be substituted unnoticed.",
+    "cameraInference": "Keep a talking face visible at a reasonable scale, avoid occlusions and extreme motion, allow natural pauses. This is production guidance, not an API guarantee.",
+    "timeline": "The source WAV frame count controls edit duration. Request ceil(seconds) from the model and trim only its visual tail; no automatic stretching or speech rewrite.",
+    "verification": "Completed job and actual saved video first; then inspect full transcript, listening, speaker identity/voice, pause alignment, visible mouth movement, geography and continuity. ASR checks words but cannot verify lips or voice fidelity.",
+    "languageQuality": "Documented languages and unlisted languages both need quality review. Unlisted languages produce a warning and must be described as unverified. No all-language guarantee is claimed.",
+    "strictAudioRequirement": "If the output modifies words, voice or timings and exact audio is required, report failure. A dedicated externally driven lip-sync stage would need separate research/integration/verification; none is installed automatically.",
+    "testBoundary": "The user asked to run creative tests in a fresh session. Only unbillable technical fixtures are tested here."
+  }
+}

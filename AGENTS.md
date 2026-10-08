@@ -1,3 +1,12 @@
+# Video creation requests
+
+For a request to create or plan a video through this project, read
+[.agents/skills/video-agent/SKILL.md](.agents/skills/video-agent/SKILL.md) before acting.
+It explains the local agent API, Voiceovers handoff, reference research and visual review,
+audio modes, generation authorization and result verification. Do not treat a previous
+session's successful native speech generation as proof of external-audio lip sync.
+API keys are runtime server inputs: never read or print environment files.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

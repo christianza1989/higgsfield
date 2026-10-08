@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "request": "A staged interview with a fictional adult presenter on a real castle observation terrace. Natural documentary style; a generic unbranded microphone. This is a structural draft requiring actual reference research, not a ready generation.",
+  "format": { "aspectRatio": "9:16", "resolution": "720p" },
+  "subject": { "kind": "fictional", "description": "An original adult presenter in a casual jacket, with a face and voice invented by the model; no resemblance to an identifiable public figure." },
+  "location": { "name": "Gediminas Castle Tower, Vilnius", "viewpoint": "Observation terrace with the correct old-town skyline behind the presenter. Use a real reviewed rooftop viewpoint, not a ground-level exterior as the background.", "minimumReferences": 3 },
+  "dialogue": { "text": "The view from here is incredible. You can see the old town stretching out behind me.", "language": "English", "delivery": "Natural conversational interview delivery, relaxed pace and clear articulation." },
+  "audio": { "mode": "native" },
+  "scenes": [{ "duration": 8, "action": "One fictional presenter looks at an interviewer just beside the camera and talks. A generic microphone enters at the lower edge. Restrained natural expression and small hand gesture. No news logo or political symbols.", "camera": "Eye-level medium close-up, handheld documentary camera with subtle drift. Clear unobstructed face. One continuous shot, no orbit or sudden zoom." }],
+  "references": []
+}

@@ -1,0 +1,200 @@
+{
+  "schemaVersion": 1,
+  "checkedOn": "2026-10-08",
+  "status": "Implemented and real-local-HTTP tested voiceover handoff and wired experimental audio-reference generation; model lip sync is not live-verified.",
+  "endpoints": {
+    "import": {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/voiceover-import",
+      "header": {
+        "X-Voiceover-Client": "voiceovers-v1"
+      },
+      "body": "multipart/form-data: file (audio/wav) and manifest (JSON text). No other fields.",
+      "success": {
+        "created": 201,
+        "replayed": 200
+      },
+      "errors": {
+        "400": "Invalid or incomplete manifest/WAV, format or duration mismatch",
+        "403": "Non-loopback, foreign origin, proxy host or missing client header",
+        "409": "Same source job changed or an import is currently being processed",
+        "413": "Request body exceeds the bounded upload size",
+        "500": "Media inspection or storage failed"
+      }
+    },
+    "retrieve": {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/voiceover-import/<importId>",
+      "effect": "Returns the local asset and manifest; no provider call"
+    },
+    "composition": {
+      "url": "http://127.0.0.1:3000/ads?voiceoverImport=<importId>",
+      "effect": "Preview recording and transcript; explicit user action creates a new ad plan, preserving the old plan until chosen."
+    }
+  },
+  "requestManifestExample": {
+    "schemaVersion": 1,
+    "source": "voiceovers",
+    "sourceJobId": "export-unique-id",
+    "status": "completed",
+    "text": "Approved voiceover text.",
+    "language": "English",
+    "style": "Friendly conversational delivery.",
+    "model": "source-tts-model",
+    "voiceId": "opaque-source-voice-id",
+    "durationSeconds": 5.25,
+    "segments": [
+      {
+        "text": "Approved voiceover text.",
+        "startSeconds": 0,
+        "endSeconds": 5.25
+      }
+    ]
+  },
+  "manifestRules": {
+    "required": [
+      "schemaVersion",
+      "source",
+      "sourceJobId",
+      "status",
+      "text",
+      "language",
+      "durationSeconds"
+    ],
+    "optional": [
+      "style",
+      "model",
+      "voiceId",
+      "segments"
+    ],
+    "additionalFields": false,
+    "sourceJobId": "1–128 characters: letters, numbers, dot, underscore, colon or hyphen; first character alphanumeric.",
+    "completedOnly": true,
+    "transcriptMaximumCharacters": 12000,
+    "segmentsMaximum": 100,
+    "segmentsMeaning": "Optional ordered non-overlapping fragment boundaries. These are not phoneme or word timestamps.",
+    "prohibited": "Credentials, absolute paths, consent recordings and enrollment/reference recordings must not be sent.",
+    "emptyTranscript": "text is a required string; empty is accepted for prepared recording transport. Agent talking packages require verified text."
+  },
+  "audio": {
+    "format": "RIFF/WAVE PCM16 mono, 24000 Hz",
+    "durationSeconds": {
+      "min": 5,
+      "max": 30
+    },
+    "maximumBytes": 15728640,
+    "manifestMaximumBytes": 65536,
+    "requestMaximumBytes": 15826944,
+    "durationAuthority": "Actual WAV PCM frame count, independently checked with ffprobe. Manifest must agree within 0.05s.",
+    "storage": "Local storage/references, Git-ignored; bytes are copied unchanged, no cloud upload."
+  },
+  "response": {
+    "schemaVersion": 1,
+    "importId": "64 hex characters; hash of source namespace and sourceJobId",
+    "asset": {
+      "assetId": "UUID",
+      "localUrl": "/api/reference-assets/<assetId>",
+      "kind": "audio",
+      "mime": "audio/wav",
+      "duration": 5.25,
+      "bytes": 252044
+    },
+    "manifest": "Normalized version 1 manifest",
+    "compositionUrl": "http://127.0.0.1:3000/ads?voiceoverImport=<importId>",
+    "generationStarted": false,
+    "capabilities": {
+      "preserveVoiceover": true,
+      "referenceAudio": {
+        "documented": true,
+        "liveVerified": false
+      },
+      "exactLipSync": false
+    }
+  },
+  "idempotency": "Same sourceJobId, normalized manifest and audio SHA256 returns the original import. Changed content with the same sourceJobId is rejected. Unknown outcome can be checked by deterministic importId; retrying identical content never generates video.",
+  "security": {
+    "host": "Actual HTTP Host must be127.0.0.1; matching Next-injected forwarded host/http proto allowed. Foreign authority or Forwarded rejected. Framework-internal req.url hostname is not the incoming authority.",
+    "origin": "Origin must be absent or same-origin; foreign Sec-Fetch-Site rejected",
+    "cors": "No CORS grants; a browser on another origin cannot supply the required custom header without an authorized preflight.",
+    "authenticationBoundary": "Trusts processes on this computer. The client marker is not a secret or full authentication. Do not expose this server on LAN or use this local contract for hosted deployments.",
+    "paidActions": "Import and preview invoke no API credentials, asset upload or generation. Existing price/Generate controls remain explicit."
+  },
+  "paths": {
+    "originalVoiceover": {
+      "implemented": true,
+      "description": "Generate silent non-talking product footage using image references; replace clip audio with the imported soundtrack during local FFmpeg editing.",
+      "lipSync": false,
+      "soundtrack": "Uploaded WAV stays unchanged; final MP4 AAC is re-encoded, so final audio bytes are not bit-identical to source PCM."
+    },
+    "seedanceReferenceAudio": {
+      "documented": true,
+      "liveVerified": false,
+      "appModelId": "openrouter:bytedance/seedance-2.5",
+      "providerModel": "bytedance/seedance-2.5",
+      "upstreamProvider": "Seed",
+      "endpoint": "POST https://openrouter.ai/api/v1/videos",
+      "body": "input_references includes {type:'audio_url',audio_url:{url:publicHTTPS}} and image_url objects; generate_audio:true. Do not combine with first/last-frame mode.",
+      "meaning": "Reference audio guides voice, timbre, dialogue or rhythm. It is not an immutable final-audio input with guaranteed per-word timings.",
+      "publication": "Local asset needs an explicit public upload before model use. Current provider reference uploads use Higgsfield storage and require its server-side credentials.",
+      "automaticFallback": false,
+      "implemented": true
+    },
+    "exactLipSync": {
+      "implemented": false,
+      "reason": "No verified audio-preserving, externally driven lip-sync pipeline in this app. Prompt instructions and accepting audio_url do not prove exact reproduction.",
+      "nextEvidence": "Explicitly authorized paid canary with approved 5s voiceover, invented actor, one product image; inspect transcript, voice preservation, full timing and visible mouth alignment. Integrate a documented dedicated lip-sync provider if this does not meet acceptance criteria."
+    }
+  },
+  "generation": {
+    "durations": "Live OpenRouter catalog: integers 4–30; imported audio: 5–30s.",
+    "resolution": [
+      "480p",
+      "720p"
+    ],
+    "defaultRatio": "9:16",
+    "fractionalTiming": "Keep source audio duration for editing. Round only the generation duration up to an integer, then trim the visual tail locally. No automatic speech-speed adjustment.",
+    "jobs": [
+      "pending",
+      "queued",
+      "in_progress",
+      "downloading",
+      "completed",
+      "failed",
+      "nsfw",
+      "canceled"
+    ],
+    "preview": "Existing Library and local MP4 media endpoints.",
+    "claim": "Terminal completed plus actual local output is required for success."
+  },
+  "referenceLimits": {
+    "authority": "BytePlus Seedance 2.5 docs and existing validation, not a successful external-audio canary.",
+    "maximumTotal": 50,
+    "images": {
+      "maximum": 30,
+      "maximumBytes": 31457280,
+      "sidesPixels": "300–6000",
+      "aspectRatio": "0.4–2.5"
+    },
+    "audio": {
+      "maximum": 10,
+      "eachSeconds": "2–30",
+      "combinedSeconds": 30,
+      "maximumBytes": 15728640
+    },
+    "portrait": "Prior actual upstream error InputImageSensitiveContentDetected.PrivacyInformation. No real face reference by default; Google voice enrollment consent does not create a Seedance portrait authorization."
+  },
+  "sources": [
+    "https://openrouter.ai/docs/api/api-reference/video-generation/submit-a-video-generation-request",
+    "https://openrouter.ai/bytedance/seedance-2.5",
+    "https://openrouter.ai/api/v1/videos/models",
+    "https://docs.byteplus.com/en/docs/modelark/create-video-generation-task-api",
+    "https://docs.byteplus.com/en/docs/modelark/seedance-2-5",
+    "https://docs.byteplus.com/en/docs/modelark/seedance-2-5-prompt-guide",
+    "https://docs.byteplus.com/en/docs/modelark/seedance-portrait-asset-guide"
+  ],
+  "verification": {
+    "nativeDesktopCanary": "PASS2026-10-08:12s technical PCM, two identical handoffs, same import URL, GETdraft/page success, unchanged WAV SHA256. Test artifacts removed.",
+    "paidExternalAudioCanary": "Not run; no lip-sync quality claim.",
+    "languageResearch": "docs/research/seedance-2.5-audio-lipsync-2026-10-08.json"
+  }
+}

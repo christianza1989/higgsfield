@@ -1,0 +1,4 @@
+interface:
+  display_name: "Video Agent"
+  short_description: "Direct videos with references and voiceovers"
+  default_prompt: "Use $video-agent to create the requested video through the local studio."
