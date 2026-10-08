@@ -1,5 +1,6 @@
 import { OPENROUTER_PREFIX } from "./openrouter-models";
 import { HiggsfieldError, type Estimate, type StatusResponse, type SubmitResponse } from "./higgsfield";
+import fs from 'node:fs';
 
 const BASE = "https://openrouter.ai/api/v1";
 export const isOpenRouter = (endpoint: string) => endpoint.startsWith(OPENROUTER_PREFIX);
@@ -9,6 +10,78 @@ function headers(): Record<string, string> {
   const key = process.env.OPENROUTER_API_KEY?.trim();
   if (!key) throw new HiggsfieldError("Set OPENROUTER_API_KEY in .env.local and restart the server.", 401);
   return { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+}
+
+/** Retain error explanations, never request bodies, headers, credentials or asset URLs. */
+export function openRouterErrorDetails(payload: unknown, secrets: string[] = []): { messages: string[]; fields: string[] } {
+  const messages: string[] = [];
+  const fields = new Set<string>();
+  const allowedFields = new Set(['model', 'duration', 'resolution', 'aspect_ratio', 'size', 'prompt', 'seed', 'generate_audio', 'input_references', 'frame_images', 'provider', 'image_url', 'video_url', 'audio_url', 'url', 'type', 'frame_type']);
+  function clean(text: string): string {
+    for (const secret of secrets.filter(Boolean)) text = text.split(secret).join('[REDACTED]');
+    return text.replace(/sk-[A-Za-z0-9_-]+/g, '[REDACTED]')
+      .replace(/Bearer\s+[^\s"<>]+/gi, 'Bearer [REDACTED]')
+      .replace(/https?:\/\/[^\s"<>]+/gi, '[URL]')
+      .replace(/\b[A-Za-z0-9_+\/-]{40,}(?:={0,2})\b/g, '[REDACTED]').slice(0, 1000);
+  }
+  function collect(value: unknown, depth = 0): void {
+    if (depth > 8 || value == null || messages.length >= 20) return;
+    if (typeof value === 'string') {
+      if (value.length > 32_000) return;
+      try { const parsed: unknown = JSON.parse(value); if (parsed && typeof parsed === 'object') { collect(parsed, depth + 1); return; } } catch { /* Plain explanation. */ }
+      messages.push(clean(value));
+    } else if (Array.isArray(value)) value.slice(0, 20).forEach(item => collect(item, depth + 1));
+    else if (typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      for (const location of [record.path, record.loc]) {
+        if (Array.isArray(location)) for (const field of location) if (typeof field === 'string' && allowedFields.has(field)) fields.add(field);
+      }
+      // Deliberately exclude echoed request/input/header objects and arbitrary metadata.
+      for (const key of ['error', 'message', 'msg', 'detail', 'details', 'issues', 'errors']) collect(record[key], depth + 1);
+      if (record.metadata && typeof record.metadata === 'object') collect((record.metadata as Record<string, unknown>).raw, depth + 1);
+    }
+  }
+  collect(payload);
+  return { messages: [...new Set(messages)], fields: [...fields] };
+}
+
+/** Inspect only in memory; return fixed messages, never provider metadata or URLs. */
+export function describeOpenRouterRejection(payload: unknown, status: number): string | undefined {
+  if (![400, 403, 413, 422].includes(status)) return;
+  const hints: string[] = [];
+  function collect(value: unknown, depth = 0): void {
+    if (depth > 8 || value == null || hints.length >= 100) return;
+    if (typeof value === 'string') {
+      const text = value.slice(0, 16_000);
+      try {
+        const parsed: unknown = JSON.parse(text);
+        if (parsed && typeof parsed === 'object') { collect(parsed, depth + 1); return; }
+      } catch { /* A plain message. */ }
+      hints.push(text);
+    } else if (Array.isArray(value)) {
+      value.slice(0, 20).forEach(item => collect(item, depth + 1));
+    } else if (typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      for (const key of ['error', 'message', 'msg', 'detail', 'details', 'issues', 'code', 'type', 'metadata', 'raw', 'errors', 'loc', 'path']) collect(record[key], depth + 1);
+    }
+  }
+  collect(payload);
+  const hint = hints.join(' ').toLowerCase();
+  if (/inputimagesensitivecontentdetected\.privacyinformation/.test(hint) ||
+      (/input image/.test(hint) && /may contain real person/.test(hint))) {
+    return 'OpenRouter\'s provider rejected a reference image because it may contain a real person (InputImageSensitiveContentDetected.PrivacyInformation). A provider-supported portrait asset workflow is required.';
+  }
+  if (/\b(zdr|zero[- ]data[- ]retention)\b/.test(hint)) return 'OpenRouter rejected video routing because Zero Data Retention is enforced. Check your OpenRouter privacy settings.';
+  if (/\b(face|faces|portrait|real[- ]person|human[- ]face)\b/.test(hint) && /reject|restrict|not support|unsupported|not allow|block|moder|authoriz|trust/.test(hint)) {
+    return 'OpenRouter reported a portrait/face asset restriction. Use a provider-supported authorized or trusted portrait asset workflow.';
+  }
+  if (/moderation|content[- _]policy|safety[- _]violation|sensitive[- _]content|content[- _]filter/.test(hint)) return 'OpenRouter reported a content moderation restriction. Review the provider requirements before another request.';
+  if (/(image|reference|asset|url)/.test(hint) && /download|fetch|inaccessible|unreachable|expired|access denied|failed to load/.test(hint)) return 'OpenRouter could not access a reference asset. Check its public URL and availability.';
+  if (/(reference|input_references|frame_images)/.test(hint) && /not support|unsupported|not allow/.test(hint)) return 'OpenRouter reported an unsupported reference mode or reference asset type for this request.';
+  if (/prompt/.test(hint) && /too long|too large|maximum|max_length|length limit|exceed/.test(hint)) return 'OpenRouter reported that the prompt exceeds an upstream length limit.';
+  if (/duration/.test(hint) && /invalid|not support|unsupported|must|allow|expected/.test(hint)) return 'OpenRouter reported an invalid or unsupported duration.';
+  if (/(resolution|aspect_ratio|aspect ratio|dimensions)/.test(hint) && /invalid|not support|unsupported|must|allow|expected/.test(hint)) return 'OpenRouter reported unsupported output dimensions, resolution or aspect ratio.';
+  if (status === 413) return 'OpenRouter rejected the request because its payload is too large.';
 }
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -28,8 +101,23 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
       404: "OpenRouter model or request not found.",
       429: "OpenRouter rate limit reached; waiting before retrying.",
     };
-    // Never forward raw upstream errors: they can contain request metadata.
-    throw new HiggsfieldError(messages[res.status] ?? `OpenRouter request failed (HTTP ${res.status}).`, res.status, res.status === 429,
+    let diagnostic: string | undefined;
+    // Never log or forward raw upstream errors: they can contain request metadata.
+    if ([400, 403, 413, 422].includes(res.status)) {
+      try {
+        const payload: unknown = await res.json();
+        diagnostic = describeOpenRouterRejection(payload, res.status);
+        const details = openRouterErrorDetails(payload, [process.env.OPENROUTER_API_KEY?.trim() ?? '']);
+        if (path === '/videos' && init.method === 'POST' && process.env.NODE_ENV !== 'test') {
+          try {
+            const directory = 'storage/diagnostics';
+            fs.mkdirSync(directory, { recursive: true });
+            fs.writeFileSync(`${directory}/openrouter-video-rejection.json`, JSON.stringify({ at: new Date().toISOString(), status: res.status, ...details }, null, 2));
+          } catch { /* Diagnostic persistence must not change the request outcome. */ }
+        }
+      } catch { /* Retain the safe fallback. */ }
+    }
+    throw new HiggsfieldError(diagnostic ?? messages[res.status] ?? `OpenRouter request failed (HTTP ${res.status}).`, res.status, res.status === 429,
       Math.max(1, Number(res.headers.get("retry-after")) || 30) * 1000);
   }
   return res.json() as Promise<T>;

@@ -1,17 +1,20 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
-import { buildOpenRouterBody, calculateVideoPrice, estimateOpenRouter, openRouterDownloadHeaders, statusOpenRouter, submitOpenRouter, type VideoModel } from "./openrouter";
+import { buildOpenRouterBody, calculateVideoPrice, describeOpenRouterRejection, estimateOpenRouter, openRouterDownloadHeaders, openRouterErrorDetails, statusOpenRouter, submitOpenRouter, type VideoModel } from "./openrouter";
 import { parseGenerationRequest } from "./payload";
 import { defaultParams, getModel } from "./models";
 import { HiggsfieldError } from "./higgsfield";
 
 const originalFetch = globalThis.fetch;
 const originalKey = process.env.OPENROUTER_API_KEY;
-beforeEach(() => { process.env.OPENROUTER_API_KEY = "test-only"; });
+const originalMode = process.env.NODE_ENV;
+beforeEach(() => { process.env.OPENROUTER_API_KEY = "test-only"; Reflect.set(process.env, 'NODE_ENV', 'test'); });
 afterEach(() => {
   globalThis.fetch = originalFetch;
   if (originalKey === undefined) delete process.env.OPENROUTER_API_KEY;
   else process.env.OPENROUTER_API_KEY = originalKey;
+  if (originalMode === undefined) Reflect.deleteProperty(process.env, 'NODE_ENV');
+  else Reflect.set(process.env, 'NODE_ENV', originalMode);
 });
 
 const endpoint = "openrouter:bytedance/seedance-2.5";
@@ -98,6 +101,78 @@ test("upstream error payloads are not exposed and ambiguous errors are not autom
       return true;
     });
   }
+});
+
+test("validation diagnostics classify errors without exposing credentials, asset URLs or raw metadata", () => {
+  const privateMessage = 'test-private-key https://private.example/asset.png';
+  const cases: [unknown, number, RegExp][] = [
+    [{ error: { message: 'Real human faces are not supported. ' + privateMessage } }, 400, /portrait\/face asset restriction/],
+    [{ error: { metadata: { raw: JSON.stringify({ error: { message: 'Failed to download reference image ' + privateMessage } }) } } }, 400, /could not access a reference/],
+    [{ error: { message: 'input_references not supported ' + privateMessage } }, 422, /unsupported reference mode/],
+    [{ error: { message: 'Prompt length exceeds maximum ' + privateMessage } }, 400, /prompt exceeds/],
+    [{ error: { message: 'ZDR enforced ' + privateMessage } }, 403, /Zero Data Retention/],
+    [{ error: { message: 'Unknown ' + privateMessage } }, 413, /payload is too large/],
+  ];
+  for (const [payload, status, expected] of cases) {
+    const message = describeOpenRouterRejection(payload, status);
+    assert.match(message!, expected);
+    assert.ok(!message!.includes('test-private-key'));
+    assert.ok(!message!.includes('https://'));
+  }
+  assert.equal(describeOpenRouterRejection({ error: { message: privateMessage } }, 400), undefined);
+  assert.equal(describeOpenRouterRejection({ error: { message: 'face moderation' } }, 500), undefined);
+  assert.match(describeOpenRouterRejection({ error: { metadata: { raw: JSON.stringify({
+    error: { message: 'Unsupported duration' }, request: { prompt: 'Human faces and trusted portrait references' }
+  }) } } }, 400)!, /unsupported duration/);
+});
+
+test("a rejected submit records a safe actionable reason and is never treated as success or retryable", async () => {
+  globalThis.fetch = (async url => String(url).endsWith('/videos/models')
+    ? Response.json({ data: [seedance] })
+    : Response.json({ error: { message: 'Portrait input not supported; private metadata' } }, { status: 400 })) as typeof fetch;
+  await assert.rejects(submitOpenRouter(endpoint, input), (error: unknown) => {
+    assert.ok(error instanceof HiggsfieldError);
+    assert.match(error.message, /portrait\/face asset restriction/);
+    assert.ok(!error.message.includes('private metadata'));
+    assert.equal(error.retryable, false);
+    return true;
+  });
+});
+
+test('actual OpenRouter ZodError JSON text preserves the field and is classified correctly', () => {
+  const payload = { success: false, error: { name: 'ZodError', message: JSON.stringify([
+    { code: 'too_small', path: ['duration'], minimum: 1, message: 'Too small: expected number to be >=1' }
+  ]) } };
+  assert.deepEqual(openRouterErrorDetails(payload), { messages: ['Too small: expected number to be >=1'], fields: ['duration'] });
+  assert.match(describeOpenRouterRejection(payload, 400)!, /unsupported duration/);
+});
+
+test('actual Seedance portrait rejection is recognized inside an HTTP-prefixed error message', () => {
+  const payload = { error: { message: 'HTTP 400: ' + JSON.stringify({ error: {
+    code: 'InputImageSensitiveContentDetected.PrivacyInformation',
+    message: "The request failed because the input image 'content[1]' may contain real person. Request id: private-id",
+    param: 'content[1]', type: 'BadRequest'
+  } }) } };
+  const result = describeOpenRouterRejection(payload, 400)!;
+  assert.match(result, /reference image because it may contain a real person/);
+  assert.match(result, /InputImageSensitiveContentDetected.PrivacyInformation/);
+  assert.ok(!result.includes('private-id'));
+});
+
+test('retained diagnostic explanations redact credentials and URLs and exclude echoed requests', () => {
+  const key = 'short-test-secret';
+  const payload = { error: { message: `Invalid asset https://example.com/private.png Bearer ${key}`, metadata: { raw: JSON.stringify({
+    error: { message: `Unrecognized field with key ${key}`, path: ['input_references', 0, 'image_url'] },
+    request: { prompt: 'PRIVATE REQUEST PROMPT', headers: { Authorization: key } }
+  }), headers: { Authorization: key } } } };
+  const details = openRouterErrorDetails(payload, [key]);
+  const serialized = JSON.stringify(details);
+  assert.ok(!serialized.includes(key));
+  assert.ok(!serialized.includes('https://'));
+  assert.ok(!serialized.includes('PRIVATE REQUEST PROMPT'));
+  assert.ok(!serialized.includes('Authorization'));
+  assert.deepEqual(details.fields, ['input_references', 'image_url']);
+  assert.ok(serialized.includes('Unrecognized field'));
 });
 
 test("Higgsfield requests retain their endpoint and OpenRouter IDs remain distinct", () => {
